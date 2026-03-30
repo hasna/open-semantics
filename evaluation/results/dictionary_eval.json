@@ -1,0 +1,8 @@
+{
+  "n_sentences": 100,
+  "mean_compression": 1.68,
+  "median_compression": 1.67,
+  "overall_compression": 1.65,
+  "exact_match_pct": 19,
+  "unknown_words": 160
+}
