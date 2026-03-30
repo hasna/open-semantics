@@ -2,116 +2,142 @@
 
 ## The Big Idea
 
-SemHex is a NEW LANGUAGE. Not a compression algorithm — a language.
+SemHex is a NEW LANGUAGE. Every word and common phrase gets a short code (2-4 hex chars). An AI trained in this language outputs codes instead of words. A decoder translates the codes back to any human language.
 
-An LLM already knows English, French, Mandarin, Arabic. You can ask it to "speak French" and it does. SemHex is teaching it one more language — except this language is made of hex codes instead of words, and it's mathematically structured so that similar meanings have similar codes.
-
-Once the LLM knows SemHex, you just say "respond in SemHex" and it does. Then you decode the output on the other end. The LLM doesn't need special architecture — it just needs to learn the language, like it learned every other language. The map IS the dictionary of this language.
-
-The difference from other languages: SemHex is COMPACT (one code = one phrase), UNIVERSAL (works across all human languages), and STRUCTURED (similar meanings have similar codes, shared prefix = shared meaning).
-
-## Goal
-
-Build the map (the dictionary of SemHex), verify it works with high accuracy, then export it so any LLM can learn this language.
-
-## The Pipeline
+It's like teaching an AI a new language. It already knows English, French, Mandarin. Now it also knows SemHex — where "frustrated" = 3F, "bug" = B1, "I'm frustrated" = A7F. You just ask it to speak SemHex instead of English.
 
 ```
-USER: "I'm frustrated with this bug"
-  ↓
-ENCODER: embed → find nearest region in the MAP → code $F1.1C3D.42ABCC...
-  ↓
-LLM: receives code(s) as input, thinks, outputs code(s)
-  ↓
-DECODER: look up code in the MAP → expand to text
-  ↓
-OUTPUT: "Have you tried checking the error log?"
+ENGLISH:  "I'm frustrated with this bug. Can someone help me fix it?"
+          65 characters, ~15 tokens
+
+SEMHEX:   A7F.09.B1.C8.3A.F7A
+          "I'm frustrated" . "this" . "bug" . "can someone" . "help" . "fix it"
+          22 characters, 6 codes
+
+COMPRESSION: 3x fewer characters, 2.5x fewer tokens
 ```
 
-## The Map
-
-A file (numpy + JSON) containing:
-- 65K+ regions of meaning space
-- Each region has: a hex code, a centroid vector, example sentences
-- ANY LLM can load this map and use it
-- Exportable, versioned, frozen once trained
-
-Built using:
-1. Embed millions of sentences (OpenAI Matryoshka at 64 dims)
-2. Cluster into 65K regions (KMeans)
-3. Quantize centroids to hex codes (geohash-style: PCA → multi-bit quantization → hex)
-4. Store as codebook file
-
-## The Encoding (geohash for meaning)
-
+The decoder on the other end:
 ```
-text → OpenAI embed(text, dims=64) → 64 floats → quantize each dim → pack into hex
+A7F.09.B1.C8.3A.F7A → "I'm frustrated with this bug. Can someone help me fix it?"
 ```
 
-Format: $XX.XXXX.XXXXXX (semantic → specific)
-- First chars = broad meaning area
-- More chars = more precise
-- Shared prefix = similar meaning
-- No lookup table needed for encoding — the code IS the quantized vector
+## How It Works
 
-## Accuracy Results So Far
+### Step 1: Build the Dictionary (THE MAP)
 
-| Config | Bits | Hex Chars | Reconstruction Similarity |
-|--------|------|-----------|--------------------------|
-| v1: PCA 48d × 1bit | 48 | 12 | 0.45 |
-| v2: PCA 48d × 2bit | 96 | 24 | 0.53 |
-| v2: PCA 128d × 2bit | 256 | 64 | 0.67 |
-| Matryoshka 64d × 2bit | 128 | 32 | 0.94 |
-| **Matryoshka 64d × 4bit** | **256** | **64** | **0.991** |
+Map every word and common phrase in every language to a short hex code:
 
-Key insight: use OpenAI's native Matryoshka (dims=64) instead of PCA.
+```
+WORDS (100K entries, 2-3 hex chars each):
+  A7 = I / I'm / I am
+  3F = frustrated / annoyed / angry
+  C2 = with
+  09 = this / that
+  B1 = bug / error / issue
+  3A = help / assist
+  ...
 
-### Best Config: 64d × 4bit (VALIDATED)
+PHRASES (500K+ entries, 3-4 hex chars each — merged common combos):
+  A7F = "I'm frustrated"     (replaces A7 + 3F)
+  F7A = "fix it" / "fix this" (replaces two words)
+  C8A = "can someone"         (replaces two words)
+  ...
+```
 
-- **Mean similarity: 0.991** on 1000 holdout sentences
-- 100% above 0.90
-- 97.2% above 0.98
-- 73.6% above 0.99
-- Worst case: 0.943
-- 64 hex characters per sentence
+The more phrases you merge, the more compression you get. This is BPE but for MEANING — frequent phrases earn their own code.
 
-## Next Steps
+### Step 2: Train the AI to Speak SemHex
 
-### Phase 1: Perfect the Map (NOW)
-- [ ] Train 64d × 4bit quantizer → 256 bits, 64 hex chars → target 0.97+ similarity
-- [ ] Scale map to 65K regions using all 89K training sentences
-- [ ] Export map as standalone file (numpy + JSON, ~1GB)
-- [ ] Verify: encode → decode → measure similarity on 1000 holdout sentences
-- [ ] Build map browser CLI: `semhex map search "anger"` → shows nearby codes
+Like how you'd teach an AI French:
+1. Take millions of conversations
+2. Encode both sides into SemHex codes using the dictionary
+3. Fine-tune the model on these encoded conversations
+4. The model learns: given these codes, produce these codes
 
-### Phase 2: Train Encoder/Decoder Models
-- [ ] Generate 10K+ training pairs (text → code, code → text) via Cerebras
-- [ ] Fine-tune encoder via brains MCP (gpt-4o-mini → text-to-codes)
-- [ ] Fine-tune decoder via brains MCP (gpt-4o-mini → codes-to-text)
-- [ ] Measure: fine-tuned encoder consistency (same input → same code?)
-- [ ] Measure: fine-tuned decoder accuracy (code → correct text?)
+After training, you tell the AI: "respond in SemHex" and it does.
 
-### Phase 3: Train LLM to Think in SemHex
-- [ ] Encode conversation dataset into SemHex (both sides)
-- [ ] Fine-tune a model that receives AND outputs SemHex codes
-- [ ] Add SemHex codes to model vocabulary (each code = 1 token)
-- [ ] Measure: tokens saved, latency reduction, cost reduction
+### Step 3: The Decoder
 
-### Phase 4: Ship It
-- [ ] Package map as downloadable file
-- [ ] CLI: `semhex encode/decode/compress/decompress`
-- [ ] MCP server for AI agents
-- [ ] npm/pip packages
-- [ ] Documentation + examples
+A simple lookup table. Code → word/phrase. Any system with the dictionary can decode.
 
-## Key Principle
+```
+A7F.09.B1.C8.3A.F7A
+  ↓ look up each code
+"I'm frustrated with this bug. Can someone help me fix it?"
+```
 
-The MAP is the product. Not the model, not the code — the MAP. It's like Unicode: a universal lookup table that any system can use. Build the best map possible, export it, and let every LLM benefit.
+The decoder can output in ANY language — the same codes decode to English, French, Spanish, etc. The codes are language-independent meaning.
+
+## Why This Compresses
+
+English is redundant:
+- "frustrated" is 10 characters to say "3F"
+- "Can someone help me" is 19 characters to say "C8.3A"
+- Articles, prepositions, grammar fillers — all compressed or merged
+
+The compression comes from:
+1. Short codes for long words (2-3 chars vs 5-15 chars)
+2. Merging common phrases into single codes
+3. Synonyms collapse to same code ("angry" = "frustrated" = "annoyed" = 3F)
+
+## What the Map IS
+
+A file. A dictionary. Like a translation dictionary English↔SemHex.
+
+- Could be 100MB-1GB depending on vocabulary size
+- JSON or binary format
+- Any LLM loads it and can speak SemHex
+- Frozen once built — codes are permanent (like Unicode)
+- Versioned: v1, v2, etc.
+
+## Current Status
+
+### What's Built
+- Geohash encoding (vector→hex coordinates) — 0.991 reconstruction accuracy
+- 89K embedded sentences (Matryoshka 64d)
+- 8,192-region map with example sentences
+- CLI: `semhex hash/unhash/encode/decode/compress/decompress`
+- MCP server with 11 tools
+- 167 tests passing
+- Scaling law measured
+
+### What Geohash IS Good For
+The vector→hex encoding (0.991 accuracy) is useful as the BACKBONE of the dictionary:
+- Each word/phrase gets embedded → geohash gives it a hex address
+- Similar meanings get similar addresses (nearby in the space)
+- The geohash IS the code assignment algorithm — it decides WHICH hex code each word gets
+
+### What Needs to Be Built
+1. **The dictionary**: Map 100K words + 500K phrases → short hex codes
+   - Use the geohash as the code assignment (so similar words get similar codes)
+   - Apply BPE-style merging to find common phrases that should get single codes
+   - Export as a loadable file
+
+2. **Encoder**: Text → look up each word/phrase in dictionary → output code sequence
+
+3. **Decoder**: Code sequence → look up each code → output text in target language
+
+4. **Train the AI**: Fine-tune a model to natively output SemHex codes via brains MCP
+
+## The Math: Is There Enough Codes?
+
+Hex codes with 2-4 characters:
+```
+2 chars (XX):     256 codes      → top 256 most common words
+3 chars (XXX):    4,096 codes    → common words + frequent phrases
+4 chars (XXXX):   65,536 codes   → full vocabulary
+5 chars (XXXXX):  1,048,576 codes → every phrase in every language
+```
+
+Variable length (like UTF-8): short codes for frequent words, longer for rare ones.
+"the" = 01 (2 chars, most common word)
+"defenestration" = F7A3 (4 chars, rare word)
 
 ## Scaling Law
 
-```
-similarity = -0.059 + 0.130 × ln(bits)  (R² = 0.994)
-```
+More data → more phrase merges → shorter average code length → better compression.
 
-More bits = more accuracy. Matryoshka embeddings dramatically improve the constant factor.
+With 1M training sentences: ~2x compression
+With 100M training sentences: ~3-4x compression
+With 1B training sentences: ~5x+ compression (as more phrase patterns are discovered)
