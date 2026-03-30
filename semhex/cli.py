@@ -223,6 +223,83 @@ def roundtrip(text: str, depth: int):
     console.print(table)
 
 
+@main.command(name="hash")
+@click.argument("text")
+@click.option("--bits", "-b", default=4, type=int, help="Bits per dimension: 2 (compact) or 4 (precise)")
+def hash_cmd(text: str, bits: int):
+    """Encode text into a SemHex geohash — a mathematical semantic address."""
+    import numpy as np
+    from openai import OpenAI
+    from semhex.core.geohash_v2 import SemHasher
+
+    client = OpenAI()
+    hasher = SemHasher(n_dims=64, bits_per_dim=bits)
+    state_name = f"matryoshka_64d_{bits}b" if bits != 2 else "matryoshka_64d_2b_full"
+    try:
+        hasher.load(state_name)
+    except FileNotFoundError:
+        console.print(f"[red]Trained state '{state_name}' not found. Run training first.[/red]")
+        return
+
+    resp = client.embeddings.create(input=[text], model="text-embedding-3-small", dimensions=64)
+    vec = np.array(resp.data[0].embedding, dtype=np.float32)
+    vec = vec / np.linalg.norm(vec)
+
+    code = hasher.encode(vec)
+    hex_chars = hasher.hex_length
+    total_bits = hasher.total_bits
+
+    console.print(f"[bold]Input:[/bold] {text}")
+    console.print(f"[bold]Code:[/bold]  [cyan]{code}[/cyan]")
+    console.print(f"[bold]Bits:[/bold]  {total_bits} ({hex_chars} hex chars)")
+
+
+@main.command(name="unhash")
+@click.argument("code")
+@click.option("--bits", "-b", default=4, type=int, help="Bits per dimension used during encoding")
+def unhash_cmd(code: str, bits: int):
+    """Decode a SemHex geohash back to the nearest concepts from the map."""
+    import json
+    import numpy as np
+    from semhex.core.geohash_v2 import SemHasher
+
+    hasher = SemHasher(n_dims=64, bits_per_dim=bits)
+    state_name = f"matryoshka_64d_{bits}b" if bits != 2 else "matryoshka_64d_2b_full"
+    try:
+        hasher.load(state_name)
+    except FileNotFoundError:
+        console.print(f"[red]Trained state not found.[/red]")
+        return
+
+    # Decode to vector
+    vec = hasher.decode(code)
+
+    # Find nearest regions in map
+    from pathlib import Path
+    map_dir = Path("codebooks/map_v1")
+    if not (map_dir / "centroids.npy").exists():
+        console.print(f"[red]Map not found at {map_dir}. Run build_map first.[/red]")
+        return
+
+    centroids = np.load(map_dir / "centroids.npy").astype(np.float32)
+    labels = json.loads((map_dir / "labels.json").read_text())
+
+    # Find nearest centroids
+    sims = centroids @ vec
+    top5 = np.argsort(-sims)[:5]
+
+    console.print(f"[bold]Code:[/bold] {code}")
+    console.print(f"[bold]Nearest regions:[/bold]")
+    for idx in top5:
+        info = labels.get(str(idx), {})
+        examples = info.get("examples", [])
+        region_code = info.get("hex_code", "?")
+        sim = float(sims[idx])
+        ex = examples[0][:80] if examples else "(no examples)"
+        console.print(f"  [cyan]{region_code[:25]}...[/cyan] (sim={sim:.4f})")
+        console.print(f"    \"{ex}\"")
+
+
 @main.command(name="compress")
 @click.argument("text")
 @click.option("--quality", "-q", default=2, type=int, help="Quality: 1 (max compress) to 4 (near-lossless)")
