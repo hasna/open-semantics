@@ -223,6 +223,49 @@ def roundtrip(text: str, depth: int):
     console.print(table)
 
 
+@main.command(name="compress")
+@click.argument("text")
+@click.option("--quality", "-q", default=2, type=int, help="Quality: 1 (max compress) to 4 (near-lossless)")
+@click.option("--provider", "-p", default="cerebras", help="LLM provider: cerebras or openai")
+def compress_cmd(text: str, quality: int, provider: str):
+    """Compress text into SemHex codes using LLM."""
+    from semhex.core.codec import compress
+    codes = compress(text, quality=quality, provider=provider)
+    console.print(f"[bold]Input:[/bold]  {text}")
+    console.print(f"[bold]Codes:[/bold]  [cyan]{codes}[/cyan]")
+    console.print(f"[bold]Ratio:[/bold]  {len(text) / max(len(codes), 1):.1f}x ({len(text)} → {len(codes)} chars)")
+
+
+@main.command(name="decompress")
+@click.argument("codes")
+@click.option("--provider", "-p", default="cerebras", help="LLM provider: cerebras or openai")
+def decompress_cmd(codes: str, provider: str):
+    """Decompress SemHex codes back to text using LLM."""
+    from semhex.core.codec import decompress
+    text = decompress(codes, provider=provider)
+    console.print(f"[bold]Codes:[/bold]  {codes}")
+    console.print(f"[bold]Text:[/bold]   {text}")
+
+
+@main.command(name="codec-roundtrip")
+@click.argument("text")
+@click.option("--quality", "-q", default=2, type=int, help="Quality: 1 to 4")
+@click.option("--provider", "-p", default="cerebras")
+def codec_roundtrip_cmd(text: str, quality: int, provider: str):
+    """Compress → decompress roundtrip with similarity measurement."""
+    from semhex.core.codec import roundtrip as codec_roundtrip
+    r = codec_roundtrip(text, quality=quality, provider=provider)
+    console.print(f"[bold]Input:[/bold]    {r['input']}")
+    console.print(f"[bold]Codes:[/bold]    [cyan]{r['codes']}[/cyan]")
+    console.print(f"[bold]Output:[/bold]   {r['output']}")
+    console.print(f"[bold]Ratio:[/bold]    {r['compression_ratio']}x")
+    if r['semantic_similarity']:
+        sim = r['semantic_similarity']
+        color = "green" if sim > 0.7 else "yellow" if sim > 0.5 else "red"
+        console.print(f"[bold]Similarity:[/bold] [{color}]{sim:.4f}[/{color}]")
+    console.print(f"[bold]Time:[/bold]    compress {r['compress_time']}s + decompress {r['decompress_time']}s")
+
+
 @main.group()
 def codebook():
     """Codebook management commands."""
