@@ -1,14 +1,22 @@
 # SemHex — Semantic Hexadecimal Encoding
 
-## What This Is
+## North Star
 
-A universal compact discrete encoding for meaning — like hex codes for colors, but for semantics. Text goes in, compact hex codes come out. Codes can be decoded back to meaning, blended (code arithmetic), and compared (semantic distance).
+> "inventează aceeași limbă ca și culorile" — "invent the same language as colors"
+
+**Find the dimensions of meaning, then make every meaning a coordinate in that space.**
+
+Colors: 3 dimensions (R, G, B) → 6 hex chars → any color: #FF0000
+Meaning: N dimensions → short hex code → any meaning: $4B.C4
+
+The code IS the meaning. No dictionary lookup. Coordinates in semantic space.
+See MISSION.md for the full mission statement.
 
 ## Architecture
 
 ```
-Text → Embedding Model → Vector → Codebook Lookup → SemHex Code ($XX.XXXX)
-SemHex Code → Codebook Lookup → Centroid → Nearest Concepts → Decoded Output
+Text → Embed (OpenAI Matryoshka 64d) → Quantize → Hex Coordinates → $XX.XXXX
+$XX.XXXX → Dequantize → Approximate Vector → Nearest Meaning → Text
 ```
 
 ## Key Concepts
