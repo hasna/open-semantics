@@ -197,6 +197,84 @@ def semhex_codebook_info() -> dict:
     }
 
 
+@mcp.tool()
+def semhex_compress(text: str, quality: int = 2, provider: str = "cerebras") -> dict:
+    """Compress text into compact SemHex codes using LLM. Like JPEG for meaning.
+
+    Args:
+        text: Text to compress.
+        quality: 1 (max compression ~10x) to 4 (near-lossless ~2x).
+        provider: "cerebras" (fast, free) or "openai".
+    """
+    from semhex.core.codec import compress
+    codes = compress(text, quality=quality, provider=provider)
+    return {
+        "codes": codes,
+        "input_chars": len(text),
+        "code_chars": len(codes),
+        "compression_ratio": round(len(text) / max(len(codes), 1), 1),
+        "quality": quality,
+    }
+
+
+@mcp.tool()
+def semhex_decompress(codes: str, provider: str = "cerebras") -> dict:
+    """Decompress SemHex codes back into natural language.
+
+    Args:
+        codes: Dot-separated alphanumeric codes (e.g., "FRU.BUG.HLP").
+        provider: "cerebras" or "openai".
+    """
+    from semhex.core.codec import decompress
+    text = decompress(codes, provider=provider)
+    return {
+        "codes": codes,
+        "text": text,
+    }
+
+
+@mcp.tool()
+def semhex_codec_roundtrip(text: str, quality: int = 2, provider: str = "cerebras") -> dict:
+    """Compress then decompress — shows both sides with similarity score.
+
+    Args:
+        text: Text to roundtrip.
+        quality: 1-4.
+        provider: "cerebras" or "openai".
+    """
+    from semhex.core.codec import roundtrip
+    return roundtrip(text, quality=quality, provider=provider)
+
+
+@mcp.tool()
+def semhex_scaling_info() -> dict:
+    """Show scaling law results from experiments."""
+    import json
+    from pathlib import Path
+
+    results = {}
+    vq_path = Path("evaluation/results/scaling_results.json")
+    if vq_path.exists():
+        results["single_vq"] = json.loads(vq_path.read_text())
+
+    rvq_path = Path("evaluation/results/rvq_scaling_results.json")
+    if rvq_path.exists():
+        results["rvq"] = json.loads(rvq_path.read_text())
+
+    codec_path = Path("evaluation/results/codec_eval.json")
+    if codec_path.exists():
+        results["codec"] = json.loads(codec_path.read_text())
+
+    results["summary"] = {
+        "single_vq_scaling": "error = 0.755 / K^0.09 (slow, impractical)",
+        "rvq_scaling": "error = 0.467 × 0.987^L (1.3% per level)",
+        "codec_baseline": "6-10x compression, 0.39-0.43 similarity (before fine-tuning)",
+        "conclusion": "Pre-computed embedding VQ scales poorly. LLM-native codec with fine-tuning is the path.",
+    }
+
+    return results
+
+
 def main():
     mcp.run(transport="stdio")
 
