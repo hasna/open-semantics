@@ -241,5 +241,85 @@ def codebook_info():
     console.print(f"[bold]Total codes:[/bold] {cb.n_level1 + cb.n_level2:,}")
 
 
+@main.group()
+def eval():
+    """Run evaluation suites."""
+    pass
+
+
+@eval.command(name="roundtrip")
+def eval_roundtrip_cmd():
+    """Evaluate encode→decode roundtrip quality."""
+    from evaluation.eval_roundtrip import eval_roundtrip
+    result = eval_roundtrip()
+    console.print(f"\n[bold]Roundtrip ({result.n_sentences} sentences):[/bold]")
+    console.print(f"  Mean similarity: [cyan]{result.mean_similarity:.4f}[/cyan]")
+    console.print(f"  Min similarity:  [cyan]{result.min_similarity:.4f}[/cyan]")
+    console.print(f"  Std deviation:   {result.std_similarity:.4f}")
+    console.print(f"  Time:            {result.elapsed_seconds:.2f}s")
+
+
+@eval.command(name="composition")
+@click.option("--n-pairs", default=200, help="Number of pairs to test")
+def eval_composition_cmd(n_pairs: int):
+    """Evaluate code arithmetic compositionality (nero's test)."""
+    from evaluation.eval_composition import eval_composition
+    result = eval_composition(n_pairs=n_pairs)
+    console.print(f"\n[bold]Composition ({result.n_pairs} pairs):[/bold]")
+    console.print(f"  Validity rate:   [cyan]{result.validity_rate:.1%}[/cyan] (target: >75%)")
+    console.print(f"  Mean similarity: [cyan]{result.mean_similarity:.4f}[/cyan]")
+    console.print(f"  Time:            {result.elapsed_seconds:.2f}s")
+
+
+@eval.command(name="distance")
+def eval_distance_cmd():
+    """Evaluate distance correlation with embedding space."""
+    from evaluation.eval_distance import eval_distance_correlation
+    result = eval_distance_correlation()
+    console.print(f"\n[bold]Distance Correlation ({result.n_pairs} pairs):[/bold]")
+    console.print(f"  Spearman r:  [cyan]{result.spearman_r:.4f}[/cyan] (target: >0.80)")
+    console.print(f"  p-value:     {result.spearman_p:.6f}")
+    console.print(f"  Time:        {result.elapsed_seconds:.2f}s")
+
+
+@eval.command(name="benchmark")
+def eval_benchmark_cmd():
+    """Run performance benchmark."""
+    from evaluation.benchmark import run_benchmark
+    result = run_benchmark()
+    console.print(f"\n[bold]Benchmark ({result.n_sentences} sentences):[/bold]")
+    console.print(f"  Compression:    [cyan]{result.compression_ratio:.1f}x[/cyan]")
+    console.print(f"  Encode speed:   [cyan]{result.encode_rate:.0f}[/cyan] sentences/sec")
+    console.print(f"  Lookup latency: [cyan]{result.lookup_time * 1000:.3f}ms[/cyan]")
+    console.print(f"  Codebook RAM:   {result.codebook_memory_mb:.2f} MB")
+
+
+@eval.command(name="all")
+@click.option("--n-pairs", default=200, help="Number of composition pairs")
+def eval_all_cmd(n_pairs: int):
+    """Run all evaluations."""
+    import json as json_mod
+    from evaluation.eval_roundtrip import eval_roundtrip
+    from evaluation.eval_composition import eval_composition
+    from evaluation.eval_distance import eval_distance_correlation
+    from evaluation.benchmark import run_benchmark
+
+    console.print("[bold]Running all evaluations...[/bold]\n")
+
+    rt = eval_roundtrip()
+    console.print(f"[green]Roundtrip:[/green] mean_sim={rt.mean_similarity:.4f} min={rt.min_similarity:.4f}")
+
+    comp = eval_composition(n_pairs=n_pairs)
+    console.print(f"[green]Composition:[/green] validity={comp.validity_rate:.1%} mean_sim={comp.mean_similarity:.4f}")
+
+    dist = eval_distance_correlation()
+    console.print(f"[green]Distance:[/green] spearman_r={dist.spearman_r:.4f} p={dist.spearman_p:.4f}")
+
+    bench = run_benchmark()
+    console.print(f"[green]Benchmark:[/green] {bench.compression_ratio:.1f}x compression, {bench.encode_rate:.0f} sent/s")
+
+    console.print("\n[bold]All evaluations complete.[/bold]")
+
+
 if __name__ == "__main__":
     main()
