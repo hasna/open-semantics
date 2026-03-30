@@ -61,9 +61,19 @@ Format: $XX.XXXX.XXXXXX (semantic → specific)
 | v1: PCA 48d × 1bit | 48 | 12 | 0.45 |
 | v2: PCA 48d × 2bit | 96 | 24 | 0.53 |
 | v2: PCA 128d × 2bit | 256 | 64 | 0.67 |
-| **Matryoshka 64d × 2bit** | **128** | **32** | **0.94** |
+| Matryoshka 64d × 2bit | 128 | 32 | 0.94 |
+| **Matryoshka 64d × 4bit** | **256** | **64** | **0.991** |
 
-Key insight: use OpenAI's native Matryoshka (dims=64) instead of PCA. 0.94 reconstruction with 32 hex chars.
+Key insight: use OpenAI's native Matryoshka (dims=64) instead of PCA.
+
+### Best Config: 64d × 4bit (VALIDATED)
+
+- **Mean similarity: 0.991** on 1000 holdout sentences
+- 100% above 0.90
+- 97.2% above 0.98
+- 73.6% above 0.99
+- Worst case: 0.943
+- 64 hex characters per sentence
 
 ## Next Steps
 
