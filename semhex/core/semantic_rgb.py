@@ -29,21 +29,41 @@ from pathlib import Path
 
 from openai import OpenAI
 
-_client: OpenAI | None = None
+_cerebras_client: OpenAI | None = None
+_openai_client: OpenAI | None = None
 
 
-def _get_client() -> OpenAI:
-    global _client
-    if _client is None:
+def _get_cerebras() -> OpenAI:
+    global _cerebras_client
+    if _cerebras_client is None:
         api_key = os.environ.get("CEREBRAS_API_KEY")
         if not api_key:
-            secrets = Path.home() / ".secrets"
-            if secrets.exists():
-                for line in secrets.read_text().splitlines():
-                    if line.startswith("export CEREBRAS_API_KEY="):
+            secrets_file = Path.home() / ".secrets" / "hasna" / "cerebras" / "live.env"
+            if secrets_file.exists():
+                for line in secrets_file.read_text().splitlines():
+                    if "CEREBRAS_API_KEY" in line and "=" in line:
                         api_key = line.split("=", 1)[1].strip().strip('"').strip("'")
-        _client = OpenAI(base_url="https://api.cerebras.ai/v1", api_key=api_key)
-    return _client
+        _cerebras_client = OpenAI(base_url="https://api.cerebras.ai/v1", api_key=api_key or "")
+    return _cerebras_client
+
+
+def _get_openai() -> OpenAI:
+    global _openai_client
+    if _openai_client is None:
+        _openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
+    return _openai_client
+
+
+def _get_client(provider: str = "auto") -> tuple[OpenAI, str]:
+    """Return (client, model) for the given provider. Falls back: cerebras → openai."""
+    if provider in ("cerebras", "auto"):
+        try:
+            return _get_cerebras(), "qwen-3-235b-a22b-instruct-2507"
+        except Exception:
+            if provider == "cerebras":
+                raise
+    # openai fallback
+    return _get_openai(), "gpt-4o-mini"
 
 
 # Dimension definitions
@@ -136,9 +156,12 @@ class SemanticColor:
         return f"{ev}, {po}, {ac} | {ag} | {do} | {it} | {sp}"
 
 
-def score_text(text: str) -> SemanticColor:
-    """Use LLM to score a text on all 7 meaning dimensions."""
-    client = _get_client()
+def score_text(text: str, provider: str = "auto") -> SemanticColor:
+    """Use LLM to score a text on all 7 meaning dimensions.
+
+    Tries Cerebras first, falls back to OpenAI on rate-limit errors.
+    """
+    import time
 
     dim_descriptions = "\n".join(
         f"- {name}: {d['scale']}"
@@ -155,33 +178,47 @@ Text: "{text}"
 Return JSON: {{"evaluation": N, "potency": N, "activity": N, "agent": N, "domain": N, "intent": N, "specificity": N}}
 ONLY the JSON, nothing else."""
 
-    response = client.chat.completions.create(
-        model="qwen-3-235b-a22b-instruct-2507",
-        messages=[
-            {"role": "system", "content": "Return ONLY valid JSON. No thinking. /no_think"},
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.0,
-        max_tokens=200,
-    )
+    providers_to_try: list[tuple[str, str]] = []
+    if provider in ("cerebras", "auto"):
+        providers_to_try.append(("cerebras", "qwen-3-235b-a22b-instruct-2507"))
+    if provider in ("openai", "auto"):
+        providers_to_try.append(("openai", "gpt-4o-mini"))
 
-    raw = response.choices[0].message.content.strip()
-    if "<think>" in raw:
-        raw = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
-    if raw.startswith("```"):
-        raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
+    last_error: Exception | None = None
+    for pname, model in providers_to_try:
+        try:
+            client = _get_cerebras() if pname == "cerebras" else _get_openai()
+            system_msg = "Return ONLY valid JSON. No thinking. /no_think" if pname == "cerebras" else "Return ONLY valid JSON."
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.0,
+                max_tokens=200,
+            )
+            raw = response.choices[0].message.content.strip()
+            if "<think>" in raw:
+                raw = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
+            if raw.startswith("```"):
+                raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
 
-    scores = json.loads(raw)
+            scores = json.loads(raw)
+            return SemanticColor(
+                evaluation=max(0, min(15, int(scores.get("evaluation", 8)))),
+                potency=max(0, min(7, int(scores.get("potency", 4)))),
+                activity=max(0, min(7, int(scores.get("activity", 4)))),
+                agent=max(0, min(7, int(scores.get("agent", 0)))),
+                domain=max(0, min(15, int(scores.get("domain", 0)))),
+                intent=max(0, min(7, int(scores.get("intent", 0)))),
+                specificity=max(0, min(15, int(scores.get("specificity", 8)))),
+            )
+        except Exception as e:
+            last_error = e
+            continue  # try next provider
 
-    return SemanticColor(
-        evaluation=max(0, min(15, int(scores.get("evaluation", 8)))),
-        potency=max(0, min(7, int(scores.get("potency", 4)))),
-        activity=max(0, min(7, int(scores.get("activity", 4)))),
-        agent=max(0, min(7, int(scores.get("agent", 0)))),
-        domain=max(0, min(15, int(scores.get("domain", 0)))),
-        intent=max(0, min(7, int(scores.get("intent", 0)))),
-        specificity=max(0, min(15, int(scores.get("specificity", 8)))),
-    )
+    raise RuntimeError(f"All providers failed. Last error: {last_error}")
 
 
 def encode(text: str) -> str:

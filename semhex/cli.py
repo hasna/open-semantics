@@ -324,6 +324,65 @@ def unhash_cmd(code: str, bits: int):
         console.print(f"    \"{ex}\"")
 
 
+@main.command(name="rgb-encode")
+@click.argument("text")
+@click.option("--json-output", "-j", is_flag=True, help="Output as JSON")
+def rgb_encode_cmd(text: str, json_output: bool):
+    """Encode text as a Semantic RGB code — 7 dimensions of meaning in 6 hex chars.
+
+    Like #RRGGBB for colors, $XX.XX.XX captures meaning:
+    evaluation, potency, activity, agent, domain, intent, specificity.
+    """
+    from semhex.core.semantic_rgb import encode, encode_detailed
+    if json_output:
+        result = encode_detailed(text)
+        click.echo(json.dumps(result, indent=2))
+        return
+    result = encode_detailed(text)
+    console.print(f"[bold]Input:[/bold]       {text}")
+    console.print(f"[bold]Code:[/bold]        [cyan]{result['code']}[/cyan]")
+    console.print(f"[bold]Description:[/bold] {result['description']}")
+    console.print(f"[bold]Compression:[/bold] {result['compression_ratio']}x ({result['input_chars']} → {result['code_chars']} chars)")
+
+
+@main.command(name="rgb-decode")
+@click.argument("code")
+@click.option("--json-output", "-j", is_flag=True, help="Output as JSON")
+def rgb_decode_cmd(code: str, json_output: bool):
+    """Decode a Semantic RGB code to human-readable description."""
+    from semhex.core.semantic_rgb import decode, SemanticColor, DOMAIN_LABELS, INTENT_LABELS, AGENT_LABELS
+    color = SemanticColor.from_hex(code)
+    desc = color.describe()
+    if json_output:
+        click.echo(json.dumps({
+            "code": code,
+            "description": desc,
+            "dimensions": {
+                "evaluation": color.evaluation,
+                "potency": color.potency,
+                "activity": color.activity,
+                "agent": color.agent,
+                "domain": color.domain,
+                "intent": color.intent,
+                "specificity": color.specificity,
+            }
+        }, indent=2))
+        return
+    table = Table(title=f"Semantic RGB: {code}")
+    table.add_column("Dimension", style="cyan")
+    table.add_column("Value", justify="right")
+    table.add_column("Meaning")
+    table.add_row("Evaluation", str(color.evaluation), "very negative→very positive (0-15)")
+    table.add_row("Potency",    str(color.potency),    "weak→strong (0-7)")
+    table.add_row("Activity",   str(color.activity),   "passive→active (0-7)")
+    table.add_row("Agent",      str(color.agent),      AGENT_LABELS.get(color.agent, "?"))
+    table.add_row("Domain",     str(color.domain),     DOMAIN_LABELS.get(color.domain, "?"))
+    table.add_row("Intent",     str(color.intent),     INTENT_LABELS.get(color.intent, "?"))
+    table.add_row("Specificity",str(color.specificity),"vague→specific (0-15)")
+    console.print(table)
+    console.print(f"\n[bold]Summary:[/bold] {desc}")
+
+
 @main.command(name="compress")
 @click.argument("text")
 @click.option("--quality", "-q", default=2, type=int, help="Quality: 1 (max compress) to 4 (near-lossless)")
