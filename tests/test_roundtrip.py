@@ -1,6 +1,7 @@
 """Integration tests: full encode→decode roundtrip pipeline."""
 
 import pytest
+from pathlib import Path
 
 from semhex.core.codebook import load_codebook
 from semhex.core.encoder import encode
@@ -112,9 +113,9 @@ class TestCLIIntegration:
     def test_cli_encode(self):
         import subprocess
         result = subprocess.run(
-            ["python", "-m", "semhex", "encode", "hello world", "-j"],
+            ["python3", "-m", "semhex", "encode", "hello world", "-j"],
             capture_output=True, text=True,
-            cwd="/Users/hasna/Workspace/hasna/opensource/open-semhex",
+            cwd=str(Path(__file__).parent.parent),
         )
         assert result.returncode == 0
         import json
@@ -125,9 +126,9 @@ class TestCLIIntegration:
     def test_cli_decode(self):
         import subprocess
         result = subprocess.run(
-            ["python", "-m", "semhex", "decode", "$00.0000", "-j"],
+            ["python3", "-m", "semhex", "decode", "$00.0000", "-j"],
             capture_output=True, text=True,
-            cwd="/Users/hasna/Workspace/hasna/opensource/open-semhex",
+            cwd=str(Path(__file__).parent.parent),
         )
         assert result.returncode == 0
         import json
@@ -137,9 +138,9 @@ class TestCLIIntegration:
     def test_cli_codebook_info(self):
         import subprocess
         result = subprocess.run(
-            ["python", "-m", "semhex", "codebook", "info"],
+            ["python3", "-m", "semhex", "codebook", "info"],
             capture_output=True, text=True,
-            cwd="/Users/hasna/Workspace/hasna/opensource/open-semhex",
+            cwd=str(Path(__file__).parent.parent),
         )
         assert result.returncode == 0
         assert "L1 clusters" in result.stdout
@@ -147,9 +148,9 @@ class TestCLIIntegration:
     def test_cli_roundtrip(self):
         import subprocess
         result = subprocess.run(
-            ["python", "-m", "semhex", "roundtrip", "The cat sat on the mat."],
+            ["python3", "-m", "semhex", "roundtrip", "The cat sat on the mat."],
             capture_output=True, text=True,
-            cwd="/Users/hasna/Workspace/hasna/opensource/open-semhex",
+            cwd=str(Path(__file__).parent.parent),
         )
         assert result.returncode == 0
         assert "Compression" in result.stdout

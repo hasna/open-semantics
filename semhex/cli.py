@@ -20,21 +20,45 @@ from rich.console import Console
 from rich.table import Table
 
 console = Console()
+err_console = Console(stderr=True)
 
 
-def _get_codebook():
+def _get_codebook(version: str = "v0.1"):
     from semhex.core.codebook import load_codebook
+    from pathlib import Path
+    import numpy as np
+
+    # Check if the requested version has the required numpy arrays
+    base = Path(__file__).parent.parent / "codebooks" / version
+    has_npy = (base / "level1.npy").exists()
+
+    if not has_npy and version == "v0.1":
+        # v0.1 has labels but missing .npy centroids — fall back to test codebook
+        err_console.print(f"[yellow]Note: codebook {version} missing centroid arrays, using test codebook.[/yellow]")
+        err_console.print("[dim]Run 'python -m training.build_codebook' to generate the full codebook.[/dim]")
+        try:
+            return load_codebook("test")
+        except FileNotFoundError:
+            err_console.print("[red]No usable codebook found.[/red]")
+            sys.exit(1)
+
     try:
-        return load_codebook("v0.1")
+        return load_codebook(version)
     except FileNotFoundError:
-        console.print("[red]Codebook v0.1 not found. Run:[/red]")
-        console.print("  python -m training.build_codebook")
+        err_console.print(f"[red]Codebook {version} not found. Run:[/red]")
+        err_console.print("  python -m training.build_codebook")
         sys.exit(1)
 
 
-def _get_provider():
+def _get_provider(codebook=None):
     from semhex.embeddings import get_provider
-    return get_provider("auto")
+    provider = get_provider("auto")
+    # If codebook dimensions don't match the provider, fall back to mock
+    if codebook is not None and provider.dimensions != codebook.dimensions:
+        from semhex.embeddings.mock import MockEmbeddingProvider
+        err_console.print(f"[yellow]Note: provider dims ({provider.dimensions}) != codebook dims ({codebook.dimensions}), using mock provider.[/yellow]")
+        return MockEmbeddingProvider(dimensions=codebook.dimensions)
+    return provider
 
 
 @click.group()
@@ -53,7 +77,7 @@ def encode(text: str, depth: int, json_output: bool):
     from semhex.core.encoder import encode as do_encode
 
     codebook = _get_codebook()
-    provider = _get_provider()
+    provider = _get_provider(codebook)
     result = do_encode(text, depth=depth, codebook=codebook, provider=provider)
 
     if json_output:
@@ -193,7 +217,7 @@ def roundtrip(text: str, depth: int):
     from semhex.core.decoder import decode as do_decode
 
     codebook = _get_codebook()
-    provider = _get_provider()
+    provider = _get_provider(codebook)
 
     # Encode
     enc = do_encode(text, depth=depth, codebook=codebook, provider=provider)
