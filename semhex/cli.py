@@ -367,6 +367,55 @@ def codec_roundtrip_cmd(text: str, quality: int, provider: str):
     console.print(f"[bold]Time:[/bold]    compress {r['compress_time']}s + decompress {r['decompress_time']}s")
 
 
+@main.command(name="dict-encode")
+@click.argument("text")
+@click.option("--json-output", "-j", is_flag=True, help="Output as JSON")
+def dict_encode_cmd(text: str, json_output: bool):
+    """Encode text using the local dictionary (no API key needed, instant)."""
+    from semhex.core.dict_encoder import dict_encode
+    codes = dict_encode(text)
+    ratio = len(text) / max(len(codes), 1)
+    if json_output:
+        click.echo(json.dumps({"text": text, "codes": codes, "compression_ratio": round(ratio, 2)}, indent=2))
+        return
+    console.print(f"[bold]Input:[/bold]  {text}")
+    console.print(f"[bold]Codes:[/bold]  [cyan]{codes}[/cyan]")
+    console.print(f"[bold]Ratio:[/bold]  {ratio:.1f}x ({len(text)} → {len(codes)} chars)")
+
+
+@main.command(name="dict-decode")
+@click.argument("codes")
+@click.option("--json-output", "-j", is_flag=True, help="Output as JSON")
+def dict_decode_cmd(codes: str, json_output: bool):
+    """Decode dictionary codes back to text (no API key needed, instant)."""
+    from semhex.core.dict_decoder import dict_decode
+    text = dict_decode(codes)
+    if json_output:
+        click.echo(json.dumps({"codes": codes, "text": text}, indent=2))
+        return
+    console.print(f"[bold]Codes:[/bold]  {codes}")
+    console.print(f"[bold]Text:[/bold]   {text}")
+
+
+@main.command(name="dict-roundtrip")
+@click.argument("text")
+@click.option("--json-output", "-j", is_flag=True, help="Output as JSON")
+def dict_roundtrip_cmd(text: str, json_output: bool):
+    """Dictionary encode → decode roundtrip (no API key needed)."""
+    from semhex.core.dict_encoder import dict_encode
+    from semhex.core.dict_decoder import dict_decode
+    codes = dict_encode(text)
+    decoded = dict_decode(codes)
+    ratio = len(text) / max(len(codes), 1)
+    if json_output:
+        click.echo(json.dumps({"input": text, "codes": codes, "output": decoded, "compression_ratio": round(ratio, 2)}, indent=2))
+        return
+    console.print(f"[bold]Input:[/bold]   {text}")
+    console.print(f"[bold]Codes:[/bold]   [cyan]{codes}[/cyan]")
+    console.print(f"[bold]Output:[/bold]  {decoded}")
+    console.print(f"[bold]Ratio:[/bold]   {ratio:.1f}x")
+
+
 @main.group()
 def codebook():
     """Codebook management commands."""
