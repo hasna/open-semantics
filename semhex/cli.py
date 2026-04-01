@@ -386,15 +386,47 @@ def dict_encode_cmd(text: str, json_output: bool):
 @main.command(name="dict-decode")
 @click.argument("codes")
 @click.option("--json-output", "-j", is_flag=True, help="Output as JSON")
-def dict_decode_cmd(codes: str, json_output: bool):
+@click.option("--detailed", "-d", is_flag=True, help="Show per-code breakdown")
+def dict_decode_cmd(codes: str, json_output: bool, detailed: bool):
     """Decode dictionary codes back to text (no API key needed, instant)."""
-    from semhex.core.dict_decoder import dict_decode
-    text = dict_decode(codes)
-    if json_output:
-        click.echo(json.dumps({"codes": codes, "text": text}, indent=2))
+    from semhex.core.dict_decoder import dict_decode, dict_decode_detailed
+    if json_output or detailed:
+        result = dict_decode_detailed(codes)
+        if json_output:
+            click.echo(json.dumps(result, indent=2))
+            return
+        # detailed table
+        table = Table(title="Dictionary Decode")
+        table.add_column("Code", style="cyan bold")
+        table.add_column("Text")
+        table.add_column("Found", justify="center")
+        for e in result["entries"]:
+            table.add_row(e["code"], e["text"], "✓" if e["found"] else "✗")
+        console.print(table)
+        console.print(f"\n[bold]Text:[/bold]    {result['text']}")
+        console.print(f"[bold]Found:[/bold]   {result['n_found']}/{result['n_codes']} codes")
         return
+    text = dict_decode(codes)
     console.print(f"[bold]Codes:[/bold]  {codes}")
     console.print(f"[bold]Text:[/bold]   {text}")
+
+
+@main.command(name="dict-info")
+def dict_info_cmd():
+    """Show dictionary statistics."""
+    import json as _json
+    from pathlib import Path
+    dict_path = Path(__file__).parent.parent / "codebooks" / "dictionary_v1.json"
+    if not dict_path.exists():
+        err_console.print("[red]dictionary_v1.json not found[/red]")
+        return
+    d = _json.loads(dict_path.read_text())
+    console.print(f"[bold]Dictionary version:[/bold] {d.get('version', 'unknown')}")
+    console.print(f"[bold]Entries:[/bold]        {d.get('n_words', 0):,}")
+    console.print(f"[bold]Phrases:[/bold]        {d.get('n_phrases', 0):,}")
+    tiers = d.get("tiers", {})
+    for tier, count in tiers.items():
+        console.print(f"  [cyan]{tier}:[/cyan] {count:,} codes")
 
 
 @main.command(name="dict-roundtrip")
