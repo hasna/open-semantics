@@ -13,7 +13,6 @@ Usage:
 from __future__ import annotations
 
 import json
-import sys
 
 import click
 from rich.console import Console
@@ -38,10 +37,24 @@ def _decoded_entry_to_dict(decoded) -> dict:
     }
 
 
+def _validate_bits(_ctx, _param, value: int) -> int:
+    if value not in {2, 4}:
+        raise click.BadParameter("bits must be 2 or 4")
+    return value
+
+
+def _fail(message: str, *, json_payload: dict | None = None) -> None:
+    if json_payload is not None:
+        payload = dict(json_payload)
+        payload["error"] = message
+        _echo_json(payload)
+        raise click.exceptions.Exit(1)
+    raise click.ClickException(message)
+
+
 def _get_codebook(version: str = "v0.1"):
     from semhex.core.codebook import load_codebook
     from pathlib import Path
-    import numpy as np
 
     # Check if the requested version has the required numpy arrays
     base = Path(__file__).parent.parent / "codebooks" / version
@@ -53,16 +66,15 @@ def _get_codebook(version: str = "v0.1"):
         err_console.print("[dim]Run 'python -m training.build_codebook' to generate the full codebook.[/dim]")
         try:
             return load_codebook("test")
-        except FileNotFoundError:
-            err_console.print("[red]No usable codebook found.[/red]")
-            sys.exit(1)
+        except FileNotFoundError as exc:
+            raise click.ClickException("No usable codebook found.") from exc
 
     try:
         return load_codebook(version)
-    except FileNotFoundError:
-        err_console.print(f"[red]Codebook {version} not found. Run:[/red]")
-        err_console.print("  python -m training.build_codebook")
-        sys.exit(1)
+    except FileNotFoundError as exc:
+        raise click.ClickException(
+            f"Codebook {version} not found. Run: python -m training.build_codebook"
+        ) from exc
 
 
 def _get_provider(codebook=None):
@@ -89,7 +101,7 @@ def main():
 
 @main.command()
 @click.argument("text")
-@click.option("--depth", "-d", default=2, type=int, help="Code depth: 1=coarse, 2=fine")
+@click.option("--depth", "-d", default=2, type=click.IntRange(1, 2), help="Code depth: 1=coarse, 2=fine")
 @click.option("--json-output", "-j", is_flag=True, help="Output as JSON")
 def encode(text: str, depth: int, json_output: bool):
     """Encode text into SemHex codes."""
@@ -185,7 +197,7 @@ def distance(code_a: str, code_b: str, json_output: bool):
 @main.command()
 @click.argument("code_a")
 @click.argument("code_b")
-@click.option("--weight", "-w", default=0.5, type=float, help="Weight for first code (0-1)")
+@click.option("--weight", "-w", default=0.5, type=click.FloatRange(0.0, 1.0), help="Weight for first code (0-1)")
 @click.option("--json-output", "-j", is_flag=True, help="Output as JSON")
 def blend(code_a: str, code_b: str, weight: float, json_output: bool):
     """Blend two codes via semantic arithmetic."""
@@ -237,11 +249,10 @@ def inspect(code: str, json_output: bool):
     result = do_decode([parsed], codebook=codebook, k_neighbors=5)
 
     if not result.decoded:
-        if json_output:
-            _echo_json({"code": code, "found": False, "neighbors": []})
-            return
-        console.print("[red]Code not found in codebook[/red]")
-        return
+        _fail(
+            "Code not found in codebook",
+            json_payload={"code": code, "found": False, "neighbors": []} if json_output else None,
+        )
 
     d = result.decoded[0]
 
@@ -265,7 +276,7 @@ def inspect(code: str, json_output: bool):
 
 @main.command()
 @click.argument("text")
-@click.option("--depth", "-d", default=2, type=int)
+@click.option("--depth", "-d", default=2, type=click.IntRange(1, 2), help="Code depth: 1=coarse, 2=fine")
 @click.option("--json-output", "-j", is_flag=True, help="Output as JSON")
 def roundtrip(text: str, depth: int, json_output: bool):
     """Encode text, then decode the codes — show both sides."""
@@ -320,7 +331,7 @@ def roundtrip(text: str, depth: int, json_output: bool):
 
 @main.command(name="hash")
 @click.argument("text")
-@click.option("--bits", "-b", default=4, type=int, help="Bits per dimension: 2 (compact) or 4 (precise)")
+@click.option("--bits", "-b", default=4, type=int, callback=_validate_bits, help="Bits per dimension: 2 (compact) or 4 (precise)")
 def hash_cmd(text: str, bits: int):
     """Encode text into a SemHex geohash — a mathematical semantic address."""
     import numpy as np
@@ -332,9 +343,8 @@ def hash_cmd(text: str, bits: int):
     state_name = f"matryoshka_64d_{bits}b" if bits != 2 else "matryoshka_64d_2b_full"
     try:
         hasher.load(state_name)
-    except FileNotFoundError:
-        console.print(f"[red]Trained state '{state_name}' not found. Run training first.[/red]")
-        return
+    except FileNotFoundError as exc:
+        raise click.ClickException(f"Trained state '{state_name}' not found. Run training first.") from exc
 
     resp = client.embeddings.create(input=[text], model="text-embedding-3-small", dimensions=64)
     vec = np.array(resp.data[0].embedding, dtype=np.float32)
@@ -351,7 +361,7 @@ def hash_cmd(text: str, bits: int):
 
 @main.command(name="unhash")
 @click.argument("code")
-@click.option("--bits", "-b", default=4, type=int, help="Bits per dimension used during encoding")
+@click.option("--bits", "-b", default=4, type=int, callback=_validate_bits, help="Bits per dimension used during encoding")
 def unhash_cmd(code: str, bits: int):
     """Decode a SemHex geohash back to the nearest concepts from the map."""
     import json
@@ -362,9 +372,8 @@ def unhash_cmd(code: str, bits: int):
     state_name = f"matryoshka_64d_{bits}b" if bits != 2 else "matryoshka_64d_2b_full"
     try:
         hasher.load(state_name)
-    except FileNotFoundError:
-        console.print("[red]Trained state not found.[/red]")
-        return
+    except FileNotFoundError as exc:
+        raise click.ClickException("Trained state not found.") from exc
 
     # Decode to vector
     vec = hasher.decode(code)
@@ -374,8 +383,7 @@ def unhash_cmd(code: str, bits: int):
 
     map_dir = Path("codebooks/map_v1")
     if not (map_dir / "centroids.npy").exists():
-        console.print(f"[red]Map not found at {map_dir}. Run build_map first.[/red]")
-        return
+        raise click.ClickException(f"Map not found at {map_dir}. Run build_map first.")
 
     centroids = np.load(map_dir / "centroids.npy").astype(np.float32)
     labels = json.loads((map_dir / "labels.json").read_text())
@@ -461,8 +469,8 @@ def rgb_decode_cmd(code: str, json_output: bool):
 
 @main.command(name="compress")
 @click.argument("text")
-@click.option("--quality", "-q", default=2, type=int, help="Quality: 1 (max compress) to 4 (near-lossless)")
-@click.option("--provider", "-p", default="cerebras", help="LLM provider: cerebras or openai")
+@click.option("--quality", "-q", default=2, type=click.IntRange(1, 4), help="Quality: 1 (max compress) to 4 (near-lossless)")
+@click.option("--provider", "-p", default="cerebras", type=click.Choice(["cerebras", "openai"], case_sensitive=False), help="LLM provider: cerebras or openai")
 @click.option("--json-output", "-j", is_flag=True, help="Output as JSON")
 def compress_cmd(text: str, quality: int, provider: str, json_output: bool):
     """Compress text into SemHex codes using LLM."""
@@ -492,7 +500,7 @@ def compress_cmd(text: str, quality: int, provider: str, json_output: bool):
 
 @main.command(name="decompress")
 @click.argument("codes")
-@click.option("--provider", "-p", default="cerebras", help="LLM provider: cerebras or openai")
+@click.option("--provider", "-p", default="cerebras", type=click.Choice(["cerebras", "openai"], case_sensitive=False), help="LLM provider: cerebras or openai")
 @click.option("--json-output", "-j", is_flag=True, help="Output as JSON")
 def decompress_cmd(codes: str, provider: str, json_output: bool):
     """Decompress SemHex codes back to text using LLM."""
@@ -510,8 +518,8 @@ def decompress_cmd(codes: str, provider: str, json_output: bool):
 
 @main.command(name="codec-roundtrip")
 @click.argument("text")
-@click.option("--quality", "-q", default=2, type=int, help="Quality: 1 to 4")
-@click.option("--provider", "-p", default="cerebras")
+@click.option("--quality", "-q", default=2, type=click.IntRange(1, 4), help="Quality: 1 to 4")
+@click.option("--provider", "-p", default="cerebras", type=click.Choice(["cerebras", "openai"], case_sensitive=False))
 @click.option("--json-output", "-j", is_flag=True, help="Output as JSON")
 def codec_roundtrip_cmd(text: str, quality: int, provider: str, json_output: bool):
     """Compress → decompress roundtrip with similarity measurement."""
@@ -589,8 +597,10 @@ def dict_info_cmd(json_output: bool):
 
     dict_path = Path(__file__).parent.parent / "codebooks" / "dictionary_v1.json"
     if not dict_path.exists():
-        err_console.print("[red]dictionary_v1.json not found[/red]")
-        return
+        _fail(
+            "dictionary_v1.json not found",
+            json_payload={"path": str(dict_path)} if json_output else None,
+        )
     d = _json.loads(dict_path.read_text())
     payload = {
         "version": d.get("version", "unknown"),
@@ -684,7 +694,7 @@ def eval_roundtrip_cmd(json_output: bool):
 
 
 @eval.command(name="composition")
-@click.option("--n-pairs", default=200, help="Number of pairs to test")
+@click.option("--n-pairs", default=200, type=click.IntRange(1, None), help="Number of pairs to test")
 @click.option("--json-output", "-j", is_flag=True, help="Output as JSON")
 def eval_composition_cmd(n_pairs: int, json_output: bool):
     """Evaluate code arithmetic compositionality (nero's test)."""
@@ -740,7 +750,7 @@ def eval_benchmark_cmd(json_output: bool):
 
 
 @eval.command(name="all")
-@click.option("--n-pairs", default=200, help="Number of composition pairs")
+@click.option("--n-pairs", default=200, type=click.IntRange(1, None), help="Number of composition pairs")
 @click.option("--json-output", "-j", is_flag=True, help="Output as JSON")
 def eval_all_cmd(n_pairs: int, json_output: bool):
     """Run all evaluations."""
