@@ -217,6 +217,50 @@ class TestSemhexDecompress:
         assert "codes" in result
 
 
+class TestSemhexHash:
+    @patch("semhex.core.codec._load_api_key", return_value="sk-test-openai")
+    @patch("openai.OpenAI")
+    @patch("semhex.core.geohash_v2.SemHasher")
+    def test_returns_hash_payload(self, mock_hasher_cls, mock_openai_cls, _mock_load_key):
+        from semhex.mcp_server import semhex_hash
+
+        mock_hasher = MagicMock()
+        mock_hasher.total_bits = 64
+        mock_hasher.hex_length = 16
+        mock_hasher.encode.return_value = "ABCD1234"
+        mock_hasher_cls.return_value = mock_hasher
+
+        mock_client = MagicMock()
+        mock_client.embeddings.create.return_value = MagicMock(
+            data=[MagicMock(embedding=[1.0, 0.0])]
+        )
+        mock_openai_cls.return_value = mock_client
+
+        result = semhex_hash("hello world")
+
+        assert result == {
+            "text": "hello world",
+            "code": "ABCD1234",
+            "bits": 64,
+            "hex_chars": 16,
+        }
+        mock_openai_cls.assert_called_once_with(api_key="sk-test-openai")
+
+    @patch("semhex.core.codec._load_api_key", return_value=None)
+    @patch("openai.OpenAI")
+    @patch("semhex.core.geohash_v2.SemHasher")
+    def test_raises_when_openai_key_missing(self, mock_hasher_cls, mock_openai_cls, _mock_load_key):
+        from semhex.mcp_server import semhex_hash
+
+        mock_hasher = MagicMock()
+        mock_hasher_cls.return_value = mock_hasher
+
+        with pytest.raises(ValueError, match="OPENAI_API_KEY not found"):
+            semhex_hash("hello world")
+
+        mock_openai_cls.assert_not_called()
+
+
 class TestSemhexDictEncode:
     def test_returns_dict(self):
         from semhex.mcp_server import semhex_dict_encode

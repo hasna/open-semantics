@@ -21,6 +21,7 @@ def _invoke(*args: str):
 
 def test_hash_json_output(monkeypatch):
     import openai
+    import semhex.core.codec as codec_mod
     import semhex.core.geohash_v2 as geohash_mod
 
     class DummyClient:
@@ -40,7 +41,8 @@ def test_hash_json_output(monkeypatch):
         def encode(self, vec):
             return "ABCD1234"
 
-    monkeypatch.setattr(openai, "OpenAI", lambda: DummyClient())
+    monkeypatch.setattr(codec_mod, "_load_api_key", lambda var_name: "sk-test-openai")
+    monkeypatch.setattr(openai, "OpenAI", lambda api_key=None: DummyClient())
     monkeypatch.setattr(geohash_mod, "SemHasher", DummyHasher)
 
     result = _invoke("hash", "compress this", "-j")
@@ -77,6 +79,32 @@ def test_hash_json_error_on_missing_state(monkeypatch):
         "state": "matryoshka_64d_4b",
         "bits_per_dimension": 4,
         "error": "Trained state 'matryoshka_64d_4b' not found. Run training first.",
+    }
+
+
+def test_hash_json_error_on_missing_openai_key(monkeypatch):
+    import openai
+    import semhex.core.codec as codec_mod
+    import semhex.core.geohash_v2 as geohash_mod
+
+    class DummyHasher:
+        def __init__(self, n_dims: int, bits_per_dim: int):
+            pass
+
+        def load(self, state_name: str):
+            return None
+
+    monkeypatch.setattr(codec_mod, "_load_api_key", lambda var_name: None)
+    monkeypatch.setattr(openai, "OpenAI", lambda api_key=None: (_ for _ in ()).throw(AssertionError("client should not be created")))
+    monkeypatch.setattr(geohash_mod, "SemHasher", DummyHasher)
+
+    result = _invoke("hash", "compress this", "-j")
+    assert result.exit_code == 1
+    data = json.loads(result.output)
+    assert data == {
+        "state": "matryoshka_64d_4b",
+        "bits_per_dimension": 4,
+        "error": "OPENAI_API_KEY not found",
     }
 
 

@@ -392,14 +392,18 @@ def semhex_hash(text: str, bits: int = 4) -> dict:
     """
     import numpy as np
     from openai import OpenAI
-    import os
+    from semhex.core.codec import _load_api_key
     from semhex.core.geohash_v2 import SemHasher
 
-    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
     hasher = SemHasher(n_dims=64, bits_per_dim=bits)
     state_name = f"matryoshka_64d_{bits}b"
     hasher.load(state_name)
 
+    api_key = _load_api_key("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY not found")
+
+    client = OpenAI(api_key=api_key)
     resp = client.embeddings.create(input=[text], model="text-embedding-3-small", dimensions=64)
     vec = np.array(resp.data[0].embedding, dtype=np.float32)
     vec = vec / np.linalg.norm(vec)

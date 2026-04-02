@@ -339,9 +339,9 @@ def hash_cmd(text: str, bits: int, json_output: bool):
     """Encode text into a SemHex geohash — a mathematical semantic address."""
     import numpy as np
     from openai import OpenAI
+    from semhex.core.codec import _load_api_key
     from semhex.core.geohash_v2 import SemHasher
 
-    client = OpenAI()
     hasher = SemHasher(n_dims=64, bits_per_dim=bits)
     state_name = f"matryoshka_64d_{bits}b" if bits != 2 else "matryoshka_64d_2b_full"
     try:
@@ -352,6 +352,14 @@ def hash_cmd(text: str, bits: int, json_output: bool):
             json_payload={"state": state_name, "bits_per_dimension": bits} if json_output else None,
         )
 
+    api_key = _load_api_key("OPENAI_API_KEY")
+    if not api_key:
+        _fail(
+            "OPENAI_API_KEY not found",
+            json_payload={"state": state_name, "bits_per_dimension": bits} if json_output else None,
+        )
+
+    client = OpenAI(api_key=api_key)
     resp = client.embeddings.create(input=[text], model="text-embedding-3-small", dimensions=64)
     vec = np.array(resp.data[0].embedding, dtype=np.float32)
     vec = vec / np.linalg.norm(vec)
