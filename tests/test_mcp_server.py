@@ -42,6 +42,19 @@ class TestSemhexCodebookInfo:
             result = semhex_codebook_info()
         assert result["total_codes"] == result["l1_clusters"] + result["l2_clusters"]
 
+    def test_get_codebook_falls_back_to_test_when_v01_missing(self):
+        from semhex import mcp_server
+
+        mcp_server._codebook = None
+        sentinel = object()
+        with patch("semhex.core.codebook.load_codebook", side_effect=[FileNotFoundError("missing"), sentinel]) as mock_load:
+            result = mcp_server._get_codebook()
+
+        assert result is sentinel
+        assert mock_load.call_args_list[0].args == ("v0.1",)
+        assert mock_load.call_args_list[1].args == ("test",)
+        mcp_server._codebook = None
+
 
 class TestSemhexDistance:
     def test_returns_dict(self, test_cb):

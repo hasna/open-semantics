@@ -41,7 +41,12 @@ def _get_codebook():
     global _codebook
     if _codebook is None:
         from semhex.core.codebook import load_codebook
-        _codebook = load_codebook("v0.1")
+
+        try:
+            _codebook = load_codebook("v0.1")
+        except FileNotFoundError:
+            # Keep MCP behavior aligned with CLI fallback in dev checkouts.
+            _codebook = load_codebook("test")
     return _codebook
 
 

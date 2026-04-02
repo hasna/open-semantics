@@ -4,10 +4,11 @@ Uses mock LLM responses to test the codec logic without API calls.
 Integration tests with real APIs are in eval_codec.py.
 """
 
+from pathlib import Path
 import pytest
 from unittest.mock import patch, MagicMock
 
-from semhex.core.codec import compress, decompress, roundtrip
+from semhex.core.codec import _load_api_key, compress, decompress, roundtrip
 
 
 class FakeCompletion:
@@ -186,3 +187,25 @@ class TestScalingResults:
             if len(results) >= 2:
                 # Larger codebook should give better similarity
                 assert results[-1]["mean_similarity"] >= results[0]["mean_similarity"]
+
+
+class TestApiKeyLoading:
+    def test_reads_exported_key_from_secrets_env(self, tmp_path, monkeypatch):
+        secrets_root = tmp_path / ".secrets" / "open" / "svc"
+        secrets_root.mkdir(parents=True)
+        (secrets_root / "live.env").write_text(
+            "export OPENAI_API_KEY='sk-test-123'\nOTHER=1\n",
+            encoding="utf-8",
+        )
+
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        assert _load_api_key("OPENAI_API_KEY") == "sk-test-123"
+
+    def test_returns_none_when_secrets_root_is_directory_only(self, tmp_path, monkeypatch):
+        (tmp_path / ".secrets").mkdir()
+        monkeypatch.delenv("CEREBRAS_API_KEY", raising=False)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        assert _load_api_key("CEREBRAS_API_KEY") is None
