@@ -21,7 +21,7 @@ def _invoke(*args: str):
 
 def test_hash_json_output(monkeypatch):
     import openai
-    import semhex.core.codec as codec_mod
+    import semhex.core.auth as auth_mod
     import semhex.core.geohash_v2 as geohash_mod
 
     class DummyClient:
@@ -41,7 +41,7 @@ def test_hash_json_output(monkeypatch):
         def encode(self, vec):
             return "ABCD1234"
 
-    monkeypatch.setattr(codec_mod, "_load_api_key", lambda var_name: "sk-test-openai")
+    monkeypatch.setattr(auth_mod, "load_api_key", lambda var_name: "sk-test-openai")
     monkeypatch.setattr(openai, "OpenAI", lambda api_key=None: DummyClient())
     monkeypatch.setattr(geohash_mod, "SemHasher", DummyHasher)
 
@@ -60,7 +60,7 @@ def test_hash_json_output(monkeypatch):
 
 def test_hash_json_output_uses_canonical_2bit_state(monkeypatch):
     import openai
-    import semhex.core.codec as codec_mod
+    import semhex.core.auth as auth_mod
     import semhex.core.geohash_v2 as geohash_mod
 
     class DummyClient:
@@ -80,7 +80,7 @@ def test_hash_json_output_uses_canonical_2bit_state(monkeypatch):
         def encode(self, vec):
             return "BEEF"
 
-    monkeypatch.setattr(codec_mod, "_load_api_key", lambda var_name: "sk-test-openai")
+    monkeypatch.setattr(auth_mod, "load_api_key", lambda var_name: "sk-test-openai")
     monkeypatch.setattr(openai, "OpenAI", lambda api_key=None: DummyClient())
     monkeypatch.setattr(geohash_mod, "SemHasher", DummyHasher)
 
@@ -117,7 +117,7 @@ def test_hash_json_error_on_missing_state(monkeypatch):
 
 def test_hash_json_error_on_missing_openai_key(monkeypatch):
     import openai
-    import semhex.core.codec as codec_mod
+    import semhex.core.auth as auth_mod
     import semhex.core.geohash_v2 as geohash_mod
 
     class DummyHasher:
@@ -127,7 +127,7 @@ def test_hash_json_error_on_missing_openai_key(monkeypatch):
         def load(self, state_name: str):
             return None
 
-    monkeypatch.setattr(codec_mod, "_load_api_key", lambda var_name: None)
+    monkeypatch.setattr(auth_mod, "load_api_key", lambda var_name: None)
     monkeypatch.setattr(openai, "OpenAI", lambda api_key=None: (_ for _ in ()).throw(AssertionError("client should not be created")))
     monkeypatch.setattr(geohash_mod, "SemHasher", DummyHasher)
 

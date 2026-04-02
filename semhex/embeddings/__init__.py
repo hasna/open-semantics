@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from semhex.core.codec import _load_api_key
+from semhex.core.auth import load_api_key as _load_api_key
 from semhex.embeddings.base import EmbeddingProvider
 from semhex.embeddings.mock import MockEmbeddingProvider
 

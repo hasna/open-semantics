@@ -22,46 +22,16 @@ Usage:
 from __future__ import annotations
 
 import json
-import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from openai import OpenAI
 
+from semhex.core.auth import load_api_key as _load_api_key
+
 _cerebras_client: OpenAI | None = None
 _openai_client: OpenAI | None = None
-
-
-def _load_api_key(var_name: str) -> str | None:
-    env_value = os.environ.get(var_name)
-    if env_value:
-        return env_value
-
-    secrets_dir = Path.home() / ".secrets"
-    if not secrets_dir.is_dir():
-        return None
-
-    for path in sorted(secrets_dir.rglob("*.env")):
-        try:
-            lines = path.read_text().splitlines()
-        except (OSError, UnicodeDecodeError):
-            continue
-
-        for line in lines:
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#"):
-                continue
-
-            if stripped.startswith("export "):
-                stripped = stripped[len("export "):].strip()
-
-            if not stripped.startswith(f"{var_name}="):
-                continue
-
-            return stripped.split("=", 1)[1].strip().strip('"').strip("'")
-
-    return None
 
 
 def _get_cerebras() -> OpenAI:

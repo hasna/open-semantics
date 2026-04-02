@@ -8,7 +8,7 @@ from __future__ import annotations
 import numpy as np
 from numpy.typing import NDArray
 
-from semhex.core.codec import _load_api_key
+from semhex.core.auth import load_api_key as _load_api_key
 from semhex.embeddings.base import EmbeddingProvider
 
 _DEFAULT_MODEL = "text-embedding-3-small"

@@ -107,6 +107,26 @@ class TestGetProvider:
             provider = get_provider("auto")
         assert provider is sentinel
 
+    def test_import_does_not_require_openai(self):
+        import builtins
+        import importlib
+        import sys
+
+        real_import = builtins.__import__
+
+        def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+            if name == "openai":
+                raise ImportError("openai unavailable")
+            return real_import(name, globals, locals, fromlist, level)
+
+        with pytest.MonkeyPatch.context() as monkeypatch:
+            for name in ["semhex.embeddings", "semhex.core.codec", "semhex.core.auth"]:
+                sys.modules.pop(name, None)
+            monkeypatch.setattr(builtins, "__import__", fake_import)
+            module = importlib.import_module("semhex.embeddings")
+
+        assert module is not None
+
     def test_unknown_raises(self):
         with pytest.raises(ValueError, match="Unknown embedding provider"):
             get_provider("nonexistent")

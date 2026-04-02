@@ -339,7 +339,7 @@ def hash_cmd(text: str, bits: int, json_output: bool):
     """Encode text into a SemHex geohash — a mathematical semantic address."""
     import numpy as np
     from openai import OpenAI
-    from semhex.core.codec import _load_api_key
+    from semhex.core.auth import load_api_key as _load_api_key
     from semhex.core.geohash_v2 import SemHasher
 
     hasher = SemHasher(n_dims=64, bits_per_dim=bits)
