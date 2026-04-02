@@ -238,15 +238,16 @@ def blend(code_a: str, code_b: str, weight: float, json_output: bool):
 
 @main.command()
 @click.argument("code")
+@click.option("--neighbors", "-k", default=5, type=click.IntRange(1, None), help="Number of nearest neighbors to show")
 @click.option("--json-output", "-j", is_flag=True, help="Output as JSON")
-def inspect(code: str, json_output: bool):
+def inspect(code: str, neighbors: int, json_output: bool):
     """Inspect a SemHex code — show centroid details and neighbors."""
     from semhex.core.format import parse_code
     from semhex.core.decoder import decode as do_decode
 
     codebook = _get_codebook()
     parsed = parse_code(code)
-    result = do_decode([parsed], codebook=codebook, k_neighbors=5)
+    result = do_decode([parsed], codebook=codebook, k_neighbors=neighbors)
 
     if not result.decoded:
         _fail(
@@ -259,6 +260,7 @@ def inspect(code: str, json_output: bool):
     if json_output:
         payload = _decoded_entry_to_dict(d)
         payload["found"] = True
+        payload["requested_neighbors"] = neighbors
         _echo_json(payload)
         return
 
@@ -269,7 +271,7 @@ def inspect(code: str, json_output: bool):
     if d.examples:
         console.print(f"[bold]Examples:[/bold] {', '.join(d.examples)}")
     if d.neighbors:
-        console.print("[bold]Neighbors:[/bold]")
+        console.print(f"[bold]Neighbors (top {neighbors}):[/bold]")
         for n in d.neighbors:
             console.print(f"  {n}")
 
@@ -362,7 +364,8 @@ def hash_cmd(text: str, bits: int):
 @main.command(name="unhash")
 @click.argument("code")
 @click.option("--bits", "-b", default=4, type=int, callback=_validate_bits, help="Bits per dimension used during encoding")
-def unhash_cmd(code: str, bits: int):
+@click.option("--neighbors", "-k", default=5, type=click.IntRange(1, None), help="Number of nearest regions to show")
+def unhash_cmd(code: str, bits: int, neighbors: int):
     """Decode a SemHex geohash back to the nearest concepts from the map."""
     import json
     import numpy as np
@@ -390,11 +393,11 @@ def unhash_cmd(code: str, bits: int):
 
     # Find nearest centroids
     sims = centroids @ vec
-    top5 = np.argsort(-sims)[:5]
+    top_indices = np.argsort(-sims)[:neighbors]
 
     console.print(f"[bold]Code:[/bold] {code}")
-    console.print("[bold]Nearest regions:[/bold]")
-    for idx in top5:
+    console.print(f"[bold]Nearest regions (top {neighbors}):[/bold]")
+    for idx in top_indices:
         info = labels.get(str(idx), {})
         examples = info.get("examples", [])
         region_code = info.get("hex_code", "?")
