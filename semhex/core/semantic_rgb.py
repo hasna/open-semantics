@@ -33,24 +33,54 @@ _cerebras_client: OpenAI | None = None
 _openai_client: OpenAI | None = None
 
 
+def _load_api_key(var_name: str) -> str | None:
+    env_value = os.environ.get(var_name)
+    if env_value:
+        return env_value
+
+    secrets_dir = Path.home() / ".secrets"
+    if not secrets_dir.is_dir():
+        return None
+
+    for path in sorted(secrets_dir.rglob("*.env")):
+        try:
+            lines = path.read_text().splitlines()
+        except (OSError, UnicodeDecodeError):
+            continue
+
+        for line in lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+
+            if stripped.startswith("export "):
+                stripped = stripped[len("export "):].strip()
+
+            if not stripped.startswith(f"{var_name}="):
+                continue
+
+            return stripped.split("=", 1)[1].strip().strip('"').strip("'")
+
+    return None
+
+
 def _get_cerebras() -> OpenAI:
     global _cerebras_client
     if _cerebras_client is None:
-        api_key = os.environ.get("CEREBRAS_API_KEY")
+        api_key = _load_api_key("CEREBRAS_API_KEY")
         if not api_key:
-            secrets_file = Path.home() / ".secrets" / "hasna" / "cerebras" / "live.env"
-            if secrets_file.exists():
-                for line in secrets_file.read_text().splitlines():
-                    if "CEREBRAS_API_KEY" in line and "=" in line:
-                        api_key = line.split("=", 1)[1].strip().strip('"').strip("'")
-        _cerebras_client = OpenAI(base_url="https://api.cerebras.ai/v1", api_key=api_key or "")
+            raise ValueError("CEREBRAS_API_KEY not found")
+        _cerebras_client = OpenAI(base_url="https://api.cerebras.ai/v1", api_key=api_key)
     return _cerebras_client
 
 
 def _get_openai() -> OpenAI:
     global _openai_client
     if _openai_client is None:
-        _openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
+        api_key = _load_api_key("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY not found")
+        _openai_client = OpenAI(api_key=api_key)
     return _openai_client
 
 
