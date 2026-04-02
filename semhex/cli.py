@@ -343,7 +343,7 @@ def hash_cmd(text: str, bits: int, json_output: bool):
     from semhex.core.geohash_v2 import SemHasher
 
     hasher = SemHasher(n_dims=64, bits_per_dim=bits)
-    state_name = f"matryoshka_64d_{bits}b" if bits != 2 else "matryoshka_64d_2b_full"
+    state_name = f"matryoshka_64d_{bits}b"
     try:
         hasher.load(state_name)
     except FileNotFoundError as exc:
@@ -398,7 +398,7 @@ def unhash_cmd(code: str, bits: int, neighbors: int, json_output: bool):
     from semhex.core.geohash_v2 import SemHasher
 
     hasher = SemHasher(n_dims=64, bits_per_dim=bits)
-    state_name = f"matryoshka_64d_{bits}b" if bits != 2 else "matryoshka_64d_2b_full"
+    state_name = f"matryoshka_64d_{bits}b"
     try:
         hasher.load(state_name)
     except FileNotFoundError as exc:

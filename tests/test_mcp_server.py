@@ -246,6 +246,28 @@ class TestSemhexHash:
         }
         mock_openai_cls.assert_called_once_with(api_key="sk-test-openai")
 
+    @patch("semhex.core.codec._load_api_key", return_value="sk-test-openai")
+    @patch("openai.OpenAI")
+    @patch("semhex.core.geohash_v2.SemHasher")
+    def test_uses_canonical_2bit_state_name(self, mock_hasher_cls, mock_openai_cls, _mock_load_key):
+        from semhex.mcp_server import semhex_hash
+
+        mock_hasher = MagicMock()
+        mock_hasher.total_bits = 32
+        mock_hasher.hex_length = 8
+        mock_hasher.encode.return_value = "BEEF"
+        mock_hasher_cls.return_value = mock_hasher
+
+        mock_client = MagicMock()
+        mock_client.embeddings.create.return_value = MagicMock(
+            data=[MagicMock(embedding=[1.0, 0.0])]
+        )
+        mock_openai_cls.return_value = mock_client
+
+        semhex_hash("hello world", bits=2)
+
+        mock_hasher.load.assert_called_once_with("matryoshka_64d_2b")
+
     @patch("semhex.core.codec._load_api_key", return_value=None)
     @patch("openai.OpenAI")
     @patch("semhex.core.geohash_v2.SemHasher")

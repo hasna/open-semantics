@@ -58,6 +58,39 @@ def test_hash_json_output(monkeypatch):
     }
 
 
+def test_hash_json_output_uses_canonical_2bit_state(monkeypatch):
+    import openai
+    import semhex.core.codec as codec_mod
+    import semhex.core.geohash_v2 as geohash_mod
+
+    class DummyClient:
+        class embeddings:
+            @staticmethod
+            def create(input, model, dimensions):
+                return SimpleNamespace(data=[SimpleNamespace(embedding=[1.0, 0.0])])
+
+    class DummyHasher:
+        def __init__(self, n_dims: int, bits_per_dim: int):
+            self.hex_length = 8
+            self.total_bits = 32
+
+        def load(self, state_name: str):
+            return None
+
+        def encode(self, vec):
+            return "BEEF"
+
+    monkeypatch.setattr(codec_mod, "_load_api_key", lambda var_name: "sk-test-openai")
+    monkeypatch.setattr(openai, "OpenAI", lambda api_key=None: DummyClient())
+    monkeypatch.setattr(geohash_mod, "SemHasher", DummyHasher)
+
+    result = _invoke("hash", "compress this", "--bits", "2", "-j")
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert data["state"] == "matryoshka_64d_2b"
+    assert data["bits_per_dimension"] == 2
+
+
 def test_hash_json_error_on_missing_state(monkeypatch):
     import openai
     import semhex.core.geohash_v2 as geohash_mod
@@ -106,6 +139,39 @@ def test_hash_json_error_on_missing_openai_key(monkeypatch):
         "bits_per_dimension": 4,
         "error": "OPENAI_API_KEY not found",
     }
+
+
+def test_unhash_json_output_uses_canonical_2bit_state(monkeypatch):
+    import semhex.core.geohash_v2 as geohash_mod
+
+    class DummyHasher:
+        def __init__(self, n_dims: int, bits_per_dim: int):
+            pass
+
+        def load(self, state_name: str):
+            return None
+
+        def decode(self, code: str):
+            return np.array([1.0, 0.0], dtype=np.float32)
+
+    labels = {
+        "0": {"hex_code": "AAA111", "examples": ["first region"]},
+    }
+
+    original_read_text = Path.read_text
+    monkeypatch.setattr(geohash_mod, "SemHasher", DummyHasher)
+    monkeypatch.setattr(np, "load", lambda path: np.array([[0.9, 0.1]], dtype=np.float32))
+    monkeypatch.setattr(
+        Path,
+        "read_text",
+        lambda self, *args, **kwargs: json.dumps(labels) if self.name == "labels.json" else original_read_text(self, *args, **kwargs),
+    )
+
+    result = _invoke("unhash", "DEADBEEF", "--bits", "2", "-j")
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert data["state"] == "matryoshka_64d_2b"
+    assert data["bits_per_dimension"] == 2
 
 
 def test_unhash_json_output(monkeypatch):
