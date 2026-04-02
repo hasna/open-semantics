@@ -26,12 +26,23 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from openai import OpenAI
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
 
 from semhex.core.auth import load_api_key as _load_api_key
 
 _cerebras_client: OpenAI | None = None
 _openai_client: OpenAI | None = None
+
+
+def _require_openai():
+    if OpenAI is None:
+        raise ImportError(
+            "openai is required for Semantic RGB encoding. Install with: pip install semhex[openai]"
+        )
+    return OpenAI
 
 
 def _get_cerebras() -> OpenAI:
@@ -40,7 +51,7 @@ def _get_cerebras() -> OpenAI:
         api_key = _load_api_key("CEREBRAS_API_KEY")
         if not api_key:
             raise ValueError("CEREBRAS_API_KEY not found")
-        _cerebras_client = OpenAI(base_url="https://api.cerebras.ai/v1", api_key=api_key)
+        _cerebras_client = _require_openai()(base_url="https://api.cerebras.ai/v1", api_key=api_key)
     return _cerebras_client
 
 
@@ -50,7 +61,7 @@ def _get_openai() -> OpenAI:
         api_key = _load_api_key("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY not found")
-        _openai_client = OpenAI(api_key=api_key)
+        _openai_client = _require_openai()(api_key=api_key)
     return _openai_client
 
 

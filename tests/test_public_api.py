@@ -106,6 +106,27 @@ class TestSemanticRGBAPI:
         assert isinstance(desc, str)
         assert "technology" in desc
 
+    def test_rgb_decode_import_without_openai_dependency(self):
+        import builtins
+        import importlib
+        import sys
+
+        real_import = builtins.__import__
+
+        def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+            if name == "openai":
+                raise ImportError("openai unavailable")
+            return real_import(name, globals, locals, fromlist, level)
+
+        with pytest.MonkeyPatch.context() as monkeypatch:
+            for name in ["semhex", "semhex.core.semantic_rgb"]:
+                sys.modules.pop(name, None)
+            monkeypatch.setattr(builtins, "__import__", fake_import)
+            module = importlib.import_module("semhex")
+
+        desc = module.rgb_decode("$00.00.00")
+        assert isinstance(desc, str)
+
     def test_rgb_decode_via_init(self):
         desc = semhex.rgb_decode("$00.00.00")
         assert isinstance(desc, str)

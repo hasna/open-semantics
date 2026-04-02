@@ -53,6 +53,14 @@ def test_get_cerebras_uses_loaded_key(monkeypatch):
     }
 
 
+def test_get_openai_raises_helpful_import_error_when_openai_missing(monkeypatch):
+    monkeypatch.setattr(semantic_rgb, "_load_api_key", lambda var_name: "sk-test-openai")
+    monkeypatch.setattr(semantic_rgb, "OpenAI", None)
+
+    with pytest.raises(ImportError, match=r"pip install semhex\[openai\]"):
+        semantic_rgb._get_openai()
+
+
 def test_get_client_auto_falls_back_to_openai(monkeypatch):
     sentinel = object()
     monkeypatch.setattr(semantic_rgb, "_get_cerebras", lambda: (_ for _ in ()).throw(ValueError("missing cerebras")))
