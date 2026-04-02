@@ -199,6 +199,7 @@ def test_codec_commands_json(monkeypatch):
             "input_chars": len(text),
             "code_chars": 7,
             "semantic_similarity": 0.91,
+            "similarity_error": None,
             "compress_time": 0.01,
             "decompress_time": 0.02,
             "quality": quality,
@@ -219,6 +220,35 @@ def test_codec_commands_json(monkeypatch):
     roundtrip = _invoke_json("codec-roundtrip", "help fix bug", "-j")
     assert roundtrip["semantic_similarity"] == 0.91
     assert roundtrip["quality"] == 2
+
+
+def test_codec_roundtrip_reports_similarity_error(monkeypatch):
+    import semhex.core.codec as codec_mod
+
+    monkeypatch.setattr(
+        codec_mod,
+        "roundtrip",
+        lambda text, quality=2, provider="cerebras": {
+            "input": text,
+            "codes": "BUG.HLP",
+            "output": "help fix bug",
+            "compression_ratio": 2.4,
+            "input_chars": len(text),
+            "code_chars": 7,
+            "semantic_similarity": None,
+            "similarity_error": "OPENAI_API_KEY not found",
+            "compress_time": 0.01,
+            "decompress_time": 0.02,
+            "quality": quality,
+            "provider": provider,
+        },
+    )
+
+    roundtrip = RUNNER.invoke(cli.main, ["codec-roundtrip", "help fix bug"])
+    assert roundtrip.exit_code == 0, roundtrip.output
+    assert "Similarity:" in roundtrip.output
+    assert "unavailable" in roundtrip.output
+    assert "OPENAI_API_KEY not found" in roundtrip.output
 
 
 def test_eval_commands_json(monkeypatch):

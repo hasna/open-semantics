@@ -593,10 +593,12 @@ def codec_roundtrip_cmd(text: str, quality: int, provider: str, json_output: boo
     console.print(f"[bold]Codes:[/bold]    [cyan]{r['codes']}[/cyan]")
     console.print(f"[bold]Output:[/bold]   {r['output']}")
     console.print(f"[bold]Ratio:[/bold]    {r['compression_ratio']}x")
-    if r["semantic_similarity"]:
+    if r["semantic_similarity"] is not None:
         sim = r["semantic_similarity"]
         color = "green" if sim > 0.7 else "yellow" if sim > 0.5 else "red"
         console.print(f"[bold]Similarity:[/bold] [{color}]{sim:.4f}[/{color}]")
+    elif r.get("similarity_error"):
+        console.print(f"[bold]Similarity:[/bold] [yellow]unavailable[/yellow] ({r['similarity_error']})")
     console.print(f"[bold]Time:[/bold]    compress {r['compress_time']}s + decompress {r['decompress_time']}s")
 
 

@@ -155,6 +155,44 @@ class TestRoundtrip:
         assert result["decompress_time"] >= 0
 
 
+    @patch("semhex.core.codec._get_openai")
+    @patch("semhex.core.codec._get_cerebras")
+    def test_zero_similarity_is_preserved(self, mock_cerebras, mock_openai):
+        cerebras = MagicMock()
+        cerebras.chat.completions.create.side_effect = [
+            FakeCompletion("FRU.BUG"),
+            FakeCompletion("Frustrated with a bug"),
+        ]
+        mock_cerebras.return_value = cerebras
+
+        openai = MagicMock()
+        fake_emb = MagicMock()
+        fake_emb.data = [
+            MagicMock(embedding=[1.0, 0.0]),
+            MagicMock(embedding=[0.0, 1.0]),
+        ]
+        openai.embeddings.create.return_value = fake_emb
+        mock_openai.return_value = openai
+
+        result = roundtrip("frustrated with bug", quality=2, provider="cerebras")
+        assert result["semantic_similarity"] == 0.0
+        assert result["similarity_error"] is None
+
+    @patch("semhex.core.codec._get_openai", side_effect=ValueError("OPENAI_API_KEY not found"))
+    @patch("semhex.core.codec._get_cerebras")
+    def test_similarity_error_reported_when_measurement_fails(self, mock_cerebras, _mock_openai):
+        client = MagicMock()
+        client.chat.completions.create.side_effect = [
+            FakeCompletion("FRU.BUG"),
+            FakeCompletion("Frustrated with a bug"),
+        ]
+        mock_cerebras.return_value = client
+
+        result = roundtrip("frustrated with bug", quality=2, provider="cerebras")
+        assert result["semantic_similarity"] is None
+        assert result["similarity_error"] == "OPENAI_API_KEY not found"
+
+
 class TestScalingResults:
     """Test that scaling law results exist and are valid."""
 

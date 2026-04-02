@@ -202,6 +202,7 @@ def roundtrip(
 
     # Measure semantic similarity via embeddings
     similarity = None
+    similarity_error = None
     try:
         openai = _get_openai()
         resp = openai.embeddings.create(input=[text, output], model="text-embedding-3-small")
@@ -209,8 +210,8 @@ def roundtrip(
         v1 = np.array(resp.data[0].embedding)
         v2 = np.array(resp.data[1].embedding)
         similarity = float(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
-    except Exception:
-        pass
+    except Exception as exc:
+        similarity_error = str(exc) or exc.__class__.__name__
 
     return {
         "input": text,
@@ -219,7 +220,8 @@ def roundtrip(
         "compression_ratio": round(ratio, 1),
         "input_chars": input_chars,
         "code_chars": code_chars,
-        "semantic_similarity": round(similarity, 4) if similarity else None,
+        "semantic_similarity": round(similarity, 4) if similarity is not None else None,
+        "similarity_error": similarity_error,
         "compress_time": round(t1 - t0, 3),
         "decompress_time": round(t2 - t1, 3),
         "quality": quality,
