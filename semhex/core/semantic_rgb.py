@@ -70,7 +70,7 @@ def _get_client(provider: str = "auto") -> tuple[OpenAI, str]:
     if provider in ("cerebras", "auto"):
         try:
             return _get_cerebras(), "qwen-3-235b-a22b-instruct-2507"
-        except Exception:
+        except (ImportError, ValueError):
             if provider == "cerebras":
                 raise
     # openai fallback

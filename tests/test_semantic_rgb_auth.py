@@ -61,6 +61,13 @@ def test_get_openai_raises_helpful_import_error_when_openai_missing(monkeypatch)
         semantic_rgb._get_openai()
 
 
+def test_get_client_auto_does_not_swallow_unexpected_errors(monkeypatch):
+    monkeypatch.setattr(semantic_rgb, "_get_cerebras", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+
+    with pytest.raises(RuntimeError, match="boom"):
+        semantic_rgb._get_client("auto")
+
+
 def test_get_client_auto_falls_back_to_openai(monkeypatch):
     sentinel = object()
     monkeypatch.setattr(semantic_rgb, "_get_cerebras", lambda: (_ for _ in ()).throw(ValueError("missing cerebras")))
