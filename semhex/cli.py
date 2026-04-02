@@ -334,7 +334,8 @@ def roundtrip(text: str, depth: int, json_output: bool):
 @main.command(name="hash")
 @click.argument("text")
 @click.option("--bits", "-b", default=4, type=int, callback=_validate_bits, help="Bits per dimension: 2 (compact) or 4 (precise)")
-def hash_cmd(text: str, bits: int):
+@click.option("--json-output", "-j", is_flag=True, help="Output as JSON")
+def hash_cmd(text: str, bits: int, json_output: bool):
     """Encode text into a SemHex geohash — a mathematical semantic address."""
     import numpy as np
     from openai import OpenAI
@@ -346,7 +347,10 @@ def hash_cmd(text: str, bits: int):
     try:
         hasher.load(state_name)
     except FileNotFoundError as exc:
-        raise click.ClickException(f"Trained state '{state_name}' not found. Run training first.") from exc
+        _fail(
+            f"Trained state '{state_name}' not found. Run training first.",
+            json_payload={"state": state_name, "bits_per_dimension": bits} if json_output else None,
+        )
 
     resp = client.embeddings.create(input=[text], model="text-embedding-3-small", dimensions=64)
     vec = np.array(resp.data[0].embedding, dtype=np.float32)
@@ -355,6 +359,19 @@ def hash_cmd(text: str, bits: int):
     code = hasher.encode(vec)
     hex_chars = hasher.hex_length
     total_bits = hasher.total_bits
+
+    if json_output:
+        _echo_json(
+            {
+                "input": text,
+                "code": code,
+                "bits": total_bits,
+                "bits_per_dimension": bits,
+                "hex_chars": hex_chars,
+                "state": state_name,
+            }
+        )
+        return
 
     console.print(f"[bold]Input:[/bold] {text}")
     console.print(f"[bold]Code:[/bold]  [cyan]{code}[/cyan]")
@@ -365,7 +382,8 @@ def hash_cmd(text: str, bits: int):
 @click.argument("code")
 @click.option("--bits", "-b", default=4, type=int, callback=_validate_bits, help="Bits per dimension used during encoding")
 @click.option("--neighbors", "-k", default=5, type=click.IntRange(1, None), help="Number of nearest regions to show")
-def unhash_cmd(code: str, bits: int, neighbors: int):
+@click.option("--json-output", "-j", is_flag=True, help="Output as JSON")
+def unhash_cmd(code: str, bits: int, neighbors: int, json_output: bool):
     """Decode a SemHex geohash back to the nearest concepts from the map."""
     import json
     import numpy as np
@@ -376,7 +394,10 @@ def unhash_cmd(code: str, bits: int, neighbors: int):
     try:
         hasher.load(state_name)
     except FileNotFoundError as exc:
-        raise click.ClickException("Trained state not found.") from exc
+        _fail(
+            "Trained state not found.",
+            json_payload={"code": code, "bits_per_dimension": bits, "state": state_name} if json_output else None,
+        )
 
     # Decode to vector
     vec = hasher.decode(code)
@@ -386,7 +407,10 @@ def unhash_cmd(code: str, bits: int, neighbors: int):
 
     map_dir = Path("codebooks/map_v1")
     if not (map_dir / "centroids.npy").exists():
-        raise click.ClickException(f"Map not found at {map_dir}. Run build_map first.")
+        _fail(
+            f"Map not found at {map_dir}. Run build_map first.",
+            json_payload={"code": code, "map_path": str(map_dir), "bits_per_dimension": bits} if json_output else None,
+        )
 
     centroids = np.load(map_dir / "centroids.npy").astype(np.float32)
     labels = json.loads((map_dir / "labels.json").read_text())
@@ -395,15 +419,38 @@ def unhash_cmd(code: str, bits: int, neighbors: int):
     sims = centroids @ vec
     top_indices = np.argsort(-sims)[:neighbors]
 
-    console.print(f"[bold]Code:[/bold] {code}")
-    console.print(f"[bold]Nearest regions (top {neighbors}):[/bold]")
+    nearest_regions = []
     for idx in top_indices:
         info = labels.get(str(idx), {})
         examples = info.get("examples", [])
         region_code = info.get("hex_code", "?")
         sim = float(sims[idx])
-        ex = examples[0][:80] if examples else "(no examples)"
-        console.print(f"  [cyan]{region_code[:25]}...[/cyan] (sim={sim:.4f})")
+        nearest_regions.append(
+            {
+                "index": int(idx),
+                "hex_code": region_code,
+                "similarity": round(sim, 4),
+                "examples": examples,
+            }
+        )
+
+    if json_output:
+        _echo_json(
+            {
+                "code": code,
+                "bits_per_dimension": bits,
+                "neighbors": neighbors,
+                "state": state_name,
+                "nearest_regions": nearest_regions,
+            }
+        )
+        return
+
+    console.print(f"[bold]Code:[/bold] {code}")
+    console.print(f"[bold]Nearest regions (top {neighbors}):[/bold]")
+    for region in nearest_regions:
+        ex = region["examples"][0][:80] if region["examples"] else "(no examples)"
+        console.print(f"  [cyan]{region['hex_code'][:25]}...[/cyan] (sim={region['similarity']:.4f})")
         console.print(f"    \"{ex}\"")
 
 
