@@ -202,3 +202,93 @@ class TestSemhexDecompress:
         assert isinstance(result, dict)
         assert "text" in result
         assert "codes" in result
+
+
+class TestSemhexDictEncode:
+    def test_returns_dict(self):
+        from semhex.mcp_server import semhex_dict_encode
+        result = semhex_dict_encode("hello world")
+        assert isinstance(result, dict)
+
+    def test_has_required_keys(self):
+        from semhex.mcp_server import semhex_dict_encode
+        result = semhex_dict_encode("hello world")
+        for key in ("text", "codes", "compression_ratio", "input_chars", "code_chars"):
+            assert key in result
+
+    def test_text_preserved(self):
+        from semhex.mcp_server import semhex_dict_encode
+        result = semhex_dict_encode("hello world")
+        assert result["text"] == "hello world"
+
+    def test_codes_non_empty(self):
+        from semhex.mcp_server import semhex_dict_encode
+        result = semhex_dict_encode("hello world")
+        assert len(result["codes"]) > 0
+
+    def test_char_counts_consistent(self):
+        from semhex.mcp_server import semhex_dict_encode
+        text = "I am frustrated with this bug"
+        result = semhex_dict_encode(text)
+        assert result["input_chars"] == len(text)
+        assert result["code_chars"] == len(result["codes"])
+
+
+class TestSemhexDictDecode:
+    def test_returns_dict(self):
+        from semhex.mcp_server import semhex_dict_decode
+        result = semhex_dict_decode("00.01")
+        assert isinstance(result, dict)
+
+    def test_has_text_and_codes(self):
+        from semhex.mcp_server import semhex_dict_decode
+        result = semhex_dict_decode("00.01")
+        assert "text" in result
+        assert "codes" in result
+
+    def test_detailed_flag(self):
+        from semhex.mcp_server import semhex_dict_decode
+        result = semhex_dict_decode("00.01", detailed=True)
+        assert "entries" in result
+        assert "n_found" in result
+
+    def test_roundtrip(self):
+        from semhex.mcp_server import semhex_dict_encode, semhex_dict_decode
+        enc = semhex_dict_encode("I am frustrated with this bug")
+        dec = semhex_dict_decode(enc["codes"])
+        assert "frustrated" in dec["text"]
+
+
+class TestSemhexRgbDecode:
+    def test_returns_dict(self):
+        from semhex.mcp_server import semhex_rgb_decode
+        result = semhex_rgb_decode("$00.00.00")
+        assert isinstance(result, dict)
+
+    def test_has_required_keys(self):
+        from semhex.mcp_server import semhex_rgb_decode
+        result = semhex_rgb_decode("$00.00.00")
+        assert "code" in result
+        assert "description" in result
+        assert "dimensions" in result
+
+    def test_dimensions_has_labels(self):
+        from semhex.mcp_server import semhex_rgb_decode
+        result = semhex_rgb_decode("$00.00.00")
+        dims = result["dimensions"]
+        assert "domain_label" in dims
+        assert "agent_label" in dims
+        assert "intent_label" in dims
+
+    def test_technology_domain(self):
+        from semhex.mcp_server import semhex_rgb_decode
+        # domain=8 → technology; construct a code with domain=8
+        from semhex.core.semantic_rgb import SemanticColor
+        c = SemanticColor(8, 4, 4, 0, 8, 0, 8)
+        result = semhex_rgb_decode(c.to_hex())
+        assert result["dimensions"]["domain_label"] == "technology"
+
+    def test_code_preserved(self):
+        from semhex.mcp_server import semhex_rgb_decode
+        result = semhex_rgb_decode("$00.00.00")
+        assert result["code"] == "$00.00.00"

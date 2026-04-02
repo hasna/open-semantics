@@ -1,12 +1,24 @@
-"""SemHex MCP Server — expose encoding/decoding as MCP tools.
+"""SemHex MCP Server — expose all encoding/decoding tools as MCP tools.
 
-Tools:
-- semhex_encode: Text → SemHex codes
-- semhex_decode: SemHex codes → meaning labels
-- semhex_distance: Distance between two codes
-- semhex_blend: Code arithmetic
-- semhex_inspect: Code details + neighbors
-- semhex_roundtrip: Encode → decode → show both + similarity
+Tools (no API key needed):
+- semhex_dict_encode:   Text → dot-separated hex codes (local dictionary, instant)
+- semhex_dict_decode:   Codes → text (local dictionary, instant)
+- semhex_rgb_decode:    $XX.XX.XX → 7-dimension breakdown (bit unpacking, instant)
+- semhex_distance:      Distance between two VQ codes
+- semhex_blend:         VQ code arithmetic
+- semhex_codebook_info: Codebook statistics
+
+Tools (require LLM API key):
+- semhex_rgb_encode:    Text → $XX.XX.XX Semantic RGB code
+- semhex_compress:      Text → compact LLM codes
+- semhex_decompress:    Codes → natural language
+- semhex_encode:        Text → VQ codebook code
+- semhex_decode:        VQ code → meaning labels
+- semhex_inspect:       VQ code details + neighbors
+- semhex_roundtrip:     VQ encode → decode roundtrip
+
+Tools (require OPENAI_API_KEY):
+- semhex_hash:          Text → semantic geohash address
 
 Run: python -m semhex.mcp_server
 """
@@ -273,6 +285,127 @@ def semhex_scaling_info() -> dict:
     }
 
     return results
+
+
+@mcp.tool()
+def semhex_dict_encode(text: str) -> dict:
+    """Encode text using the local dictionary — instant, no API key needed.
+
+    Uses a 73K-word dictionary with phrase merging for compression.
+    Returns dot-separated hex codes. Faster than LLM codec but less semantic.
+
+    Args:
+        text: Input text to encode.
+    """
+    from semhex.core.dict_encoder import dict_encode
+    codes = dict_encode(text)
+    ratio = len(text) / max(len(codes), 1)
+    return {
+        "text": text,
+        "codes": codes,
+        "compression_ratio": round(ratio, 2),
+        "input_chars": len(text),
+        "code_chars": len(codes),
+    }
+
+
+@mcp.tool()
+def semhex_dict_decode(codes: str, detailed: bool = False) -> dict:
+    """Decode dictionary codes back to text — instant, no API key needed.
+
+    Args:
+        codes: Dot-separated hex codes (e.g., "D019.1866.DBC7.13F0").
+        detailed: If True, include per-code breakdown with found/unknown status.
+    """
+    from semhex.core.dict_decoder import dict_decode, dict_decode_detailed
+    if detailed:
+        return dict_decode_detailed(codes)
+    return {
+        "codes": codes,
+        "text": dict_decode(codes),
+    }
+
+
+@mcp.tool()
+def semhex_rgb_encode(text: str) -> dict:
+    """Encode text as Semantic RGB — 7 dimensions of meaning in 6 hex chars ($XX.XX.XX).
+
+    Like #RRGGBB for colors, $XX.XX.XX captures:
+    evaluation (positive/negative), potency (strong/weak), activity (active/passive),
+    agent (self/other/abstract), domain (technology/emotion/science/…),
+    intent (express/ask/command), specificity (vague/specific).
+
+    Requires CEREBRAS_API_KEY or OPENAI_API_KEY.
+
+    Args:
+        text: Input text to encode.
+    """
+    from semhex.core.semantic_rgb import encode_detailed
+    return encode_detailed(text)
+
+
+@mcp.tool()
+def semhex_rgb_decode(code: str) -> dict:
+    """Decode a Semantic RGB code ($XX.XX.XX) to dimension values and description.
+
+    No API key needed — pure bit unpacking.
+
+    Args:
+        code: Semantic RGB code like "$2A.C4.06".
+    """
+    from semhex.core.semantic_rgb import SemanticColor, DOMAIN_LABELS, AGENT_LABELS, INTENT_LABELS
+    color = SemanticColor.from_hex(code)
+    return {
+        "code": code,
+        "description": color.describe(),
+        "dimensions": {
+            "evaluation": color.evaluation,
+            "potency": color.potency,
+            "activity": color.activity,
+            "agent": color.agent,
+            "agent_label": AGENT_LABELS.get(color.agent, "?"),
+            "domain": color.domain,
+            "domain_label": DOMAIN_LABELS.get(color.domain, "?"),
+            "intent": color.intent,
+            "intent_label": INTENT_LABELS.get(color.intent, "?"),
+            "specificity": color.specificity,
+        },
+    }
+
+
+@mcp.tool()
+def semhex_hash(text: str, bits: int = 4) -> dict:
+    """Encode text as a semantic geohash — a mathematical address in embedding space.
+
+    Uses PCA + quantization on OpenAI Matryoshka embeddings.
+    Similar meanings produce nearby addresses.
+    Requires OPENAI_API_KEY.
+
+    Args:
+        text: Input text.
+        bits: Bits per dimension (2=compact 32 hex chars, 4=precise 64 hex chars).
+    """
+    import numpy as np
+    from openai import OpenAI
+    import os
+    from semhex.core.geohash_v2 import SemHasher
+
+    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
+    hasher = SemHasher(n_dims=64, bits_per_dim=bits)
+    state_name = f"matryoshka_64d_{bits}b"
+    hasher.load(state_name)
+
+    resp = client.embeddings.create(input=[text], model="text-embedding-3-small", dimensions=64)
+    vec = np.array(resp.data[0].embedding, dtype=np.float32)
+    vec = vec / np.linalg.norm(vec)
+    code = hasher.encode(vec)
+
+    return {
+        "text": text,
+        "code": code,
+        "bits": hasher.total_bits,
+        "hex_chars": hasher.hex_length,
+    }
 
 
 def main():
