@@ -5,11 +5,10 @@ Requires OPENAI_API_KEY environment variable.
 
 from __future__ import annotations
 
-import os
-
 import numpy as np
 from numpy.typing import NDArray
 
+from semhex.core.codec import _load_api_key
 from semhex.embeddings.base import EmbeddingProvider
 
 _DEFAULT_MODEL = "text-embedding-3-small"
@@ -28,7 +27,10 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 "Install with: pip install semhex[openai]"
             )
         self._model = model
-        self._client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY"))
+        resolved_api_key = api_key or _load_api_key("OPENAI_API_KEY")
+        if not resolved_api_key:
+            raise ValueError("OPENAI_API_KEY not found")
+        self._client = OpenAI(api_key=resolved_api_key)
 
     @property
     def dimensions(self) -> int:

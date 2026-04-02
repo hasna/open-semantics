@@ -95,6 +95,25 @@ class TestOpenAIEmbeddingProvider:
         p.embed_batch(["a", "b", "c", "d", "e"])
         assert client.embeddings.create.call_count == 1
 
+    @patch("semhex.embeddings.openai_embed._load_api_key", return_value="loaded-key")
+    @patch("openai.OpenAI")
+    def test_uses_loaded_key_when_api_key_not_passed(self, mock_openai_cls, _mock_load_key):
+        from semhex.embeddings.openai_embed import OpenAIEmbeddingProvider
+
+        OpenAIEmbeddingProvider()
+
+        mock_openai_cls.assert_called_once_with(api_key="loaded-key")
+
+    @patch("semhex.embeddings.openai_embed._load_api_key", return_value=None)
+    @patch("openai.OpenAI")
+    def test_raises_when_key_missing(self, mock_openai_cls, _mock_load_key):
+        from semhex.embeddings.openai_embed import OpenAIEmbeddingProvider
+
+        with pytest.raises(ValueError, match="OPENAI_API_KEY not found"):
+            OpenAIEmbeddingProvider()
+
+        mock_openai_cls.assert_not_called()
+
     def test_zero_vector_not_normalized_to_nan(self, provider):
         """Zero vector should not produce NaN — norm guard prevents division by zero."""
         p, client = provider

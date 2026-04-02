@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from semhex.core.codec import _load_api_key
 from semhex.embeddings.base import EmbeddingProvider
 from semhex.embeddings.mock import MockEmbeddingProvider
 
@@ -38,12 +39,12 @@ def get_provider(name: str = "auto") -> EmbeddingProvider:
         except ImportError:
             pass
 
-        # Try OpenAI if key is available
-        import os
-        if os.environ.get("OPENAI_API_KEY"):
+        # Try OpenAI if a key is available via env or ~/.secrets
+        api_key = _load_api_key("OPENAI_API_KEY")
+        if api_key:
             try:
                 from semhex.embeddings.openai_embed import OpenAIEmbeddingProvider
-                return OpenAIEmbeddingProvider()
+                return OpenAIEmbeddingProvider(api_key=api_key)
             except ImportError:
                 pass
 

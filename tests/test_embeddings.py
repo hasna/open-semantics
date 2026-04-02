@@ -97,6 +97,16 @@ class TestGetProvider:
         provider = get_provider("auto")
         assert isinstance(provider, EmbeddingProvider)
 
+    def test_auto_uses_openai_when_loader_finds_key(self):
+        sentinel = object()
+        with pytest.MonkeyPatch.context() as monkeypatch:
+            import semhex.embeddings as embeddings_mod
+            monkeypatch.setattr("semhex.embeddings.local_embed.LocalEmbeddingProvider", lambda: (_ for _ in ()).throw(ImportError("no local provider")))
+            monkeypatch.setattr(embeddings_mod, "_load_api_key", lambda var_name: "loaded-key")
+            monkeypatch.setattr("semhex.embeddings.openai_embed.OpenAIEmbeddingProvider", lambda api_key=None: sentinel)
+            provider = get_provider("auto")
+        assert provider is sentinel
+
     def test_unknown_raises(self):
         with pytest.raises(ValueError, match="Unknown embedding provider"):
             get_provider("nonexistent")
